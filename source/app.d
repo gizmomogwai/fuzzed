@@ -246,7 +246,7 @@ void main(string[] args)
     Curses.Config config;
     with (config)
     {
-        disableEcho = false;
+        disableEcho = true;
         initKeypad = true;
         cursLevel = 0;
     }
@@ -297,6 +297,13 @@ void main(string[] args)
                 case 13:
                     finished = true;
                     result = matchList.get;
+                    break;
+                case 127:
+                    if (pattern.length > 0)
+                    {
+                        pattern = pattern[0 .. $ - 1];
+                        ui.update(new Model(all, pattern));
+                    }
                     break;
                 default:
                     pattern ~= input.chr;
