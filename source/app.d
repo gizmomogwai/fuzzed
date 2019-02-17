@@ -31,17 +31,38 @@ auto attributed(Match match, bool selected)
 /// Model for the list and the statusbar
 class Model
 {
+    interface Listener
+    {
+        void changed();
+    }
+
     public string[] all;
     public Match[] matches;
-    this(string[] all, string pattern)
+    private Listener listener;
+    this(string[] all)
     {
         this.all = all;
+        update("");
+    }
+
+    void update(string pattern)
+    {
         this.matches = all.map!(a => fuzzyMatch(a, pattern)).filter!(a => a !is null).array;
+        if (listener)
+        {
+            listener.changed;
+        }
+    }
+
+    auto setListener(Listener listener)
+    {
+        this.listener = listener;
+        listener.changed;
+        return this;
     }
 }
-
 /// The working horse
-class List(S, T)
+class UiList(S, T)
 {
     S curses;
     T screen;
@@ -51,12 +72,13 @@ class List(S, T)
 
     Model model;
 
-    this(S curses, T screen)
+    this(S curses, T screen, Model model)
     {
         this.curses = curses;
         this.screen = screen;
         this.selection = 0;
         this.offset = 0;
+        this.model = model;
         resize;
     }
 
@@ -66,17 +88,17 @@ class List(S, T)
         return model.matches[selection].value;
     }
 
-    /// update the model
-    void update(Model model)
+    void changed()
     {
-        this.model = model;
         offset = 0;
         selection = 0;
     }
 
     void resize()
     {
-        this.height = screen.height - 1;
+        height = screen.height - 1;
+        selection = 0;
+        offset = 0;
     }
 
     private int selectionToScreen()
@@ -119,35 +141,34 @@ class List(S, T)
         foreach (index, match; matches)
         {
             auto y = height - index.to!int - 1;
-            screen.addstr(y, 2, match.value[0 .. min(screen.width - 2,
-                    match.value.length)], match.attributed(index == selection - offset), OOB.ignore);
+            auto trimmed = match.value[0 .. min(screen.width - 2, match.value.length)];
+            screen.addstr(y, 2, trimmed, match.attributed(index == selection - offset), OOB.ignore);
         }
         screen.addstr(selectionToScreen, 0, ">", Attr.bold);
     }
 }
 
 /// factory for List(S, T)
-auto list(S, T)(S curses, T screen)
+auto uiList(S, T)(S curses, T screen, Model model)
 {
-    return new List!(S, T)(curses, screen);
+    return new UiList!(S, T)(curses, screen, model);
 }
 
 /// Statusline
-class Status(S, T)
+class UiStatus(S, T)
 {
     S curses;
     T screen;
     Model model;
-    this(S curses, T screen)
+    this(S curses, T screen, Model model)
     {
         this.curses = curses;
         this.screen = screen;
+        this.model = model;
     }
 
-    auto update(Model model)
+    void changed()
     {
-        this.model = model;
-        return this;
     }
 
     auto resize()
@@ -174,34 +195,44 @@ class Status(S, T)
 }
 
 /// factory for Status(S, T)
-auto status(S, T)(S curses, T screen)
+auto uiStatus(S, T)(S curses, T screen, Model model)
 {
-    return new Status!(S, T)(curses, screen);
+    return new UiStatus!(S, T)(curses, screen, model);
 }
 
 /// The ui made out of List and Status
-class Ui(S, T)
+class Ui(S, T) : Model.Listener
 {
     S curses;
     T screen;
-    List!(S, T) list;
-    Status!(S, T) status;
-    this(S curses, T screen, List!(S, T) list, Status!(S, T) status)
+    UiList!(S, T) list;
+    UiStatus!(S, T) status;
+    this(S curses, T screen, Model model)
     {
         this.curses = curses;
         this.screen = screen;
-        this.list = list;
-        this.status = status;
+        this.list = uiList(curses, screen, model);
+        this.status = uiStatus(curses, screen, model);
+        model.setListener(this);
+    }
+
+    auto get()
+    {
+        return list.get;
     }
 
     auto render()
     {
         try
         {
+            // ncurses
             screen.clear;
+
+            // own api
             list.render;
             status.render;
 
+            // ncurses
             screen.refresh;
             curses.update;
             return this;
@@ -219,12 +250,11 @@ class Ui(S, T)
         return render;
     }
 
-    auto update(Model model)
+    void changed()
     {
-        list.update(model);
-        status.update(model);
-
-        return render;
+        list.changed;
+        status.changed;
+        render;
     }
 
     auto selectUp()
@@ -243,92 +273,109 @@ class Ui(S, T)
 }
 
 /// factory for UI(S, T)
-auto ui(S, T)(S curses, T screen, List!(S, T) list, Status!(S, T) status)
+auto ui(S, T)(S curses, T screen, Model model)
 {
-    return new Ui!(S, T)(curses, screen, list, status);
+    return new Ui!(S, T)(curses, screen, model);
 }
 
-void main(string[] args)
+/// reopen a tty input if we got piped in
+string[] prepareInput()
 {
-    string[] all;
-    foreach (ulong i, string l; lines(stdin))
-    {
-        import std.string;
-
-        all ~= l.strip;
-    }
-
     import core.sys.posix.unistd;
 
     if (!isatty(0))
     {
+        string[] res = stdin.byLineCopy.map!(s => s.strip).array;
         stdin.reopen("/dev/tty");
+        return res;
     }
-
-    Curses.Config config = {disableEcho:
-    true, initKeypad : true, cursLevel : 0};
-    string result;
+    else
     {
-        auto curses = new Curses(config);
-        scope (exit)
-            destroy(curses);
+        return [];
+    }
+}
 
-        auto screen = curses.stdscr;
+/// State of the search
+struct State
+{
+    bool finished;
+    string result;
+    string pattern;
+}
 
-        string pattern = "";
-        auto matchList = list(curses, screen);
-        auto status = status(curses, screen);
-        auto ui = ui(curses, screen, matchList, status);
-
-        ui.update(new Model(all, pattern));
-
-        bool finished = false;
-        while (!finished)
+/// handle input events
+State handleKey(S, T)(S input, T ui, Model model, State state)
+{
+    if (input.isSpecialKey)
+    {
+        switch (input.key)
         {
-            auto input = screen.getwch;
-            if (input.isSpecialKey)
-            {
-                switch (input.key)
-                {
-                case Key.up:
-                    ui.selectUp;
-                    break;
-                case Key.down:
-                    ui.selectDown;
-                    break;
-                case Key.enter:
-                    finished = true;
-                    result = matchList.get;
-                    break;
-                case Key.resize:
-                    ui.resize;
-                    break;
-                default:
-                    break;
-                }
-            }
-            else
-            {
-                switch (input.chr)
-                {
-                case 13:
-                    finished = true;
-                    result = matchList.get;
-                    break;
-                case 127:
-                    if (pattern.length > 0)
-                    {
-                        pattern = pattern[0 .. $ - 1];
-                        ui.update(new Model(all, pattern));
-                    }
-                    break;
-                default:
-                    pattern ~= input.chr;
-                    ui.update(new Model(all, pattern));
-                    break;
-                }
-            }
+        case Key.up:
+            ui.selectUp;
+            break;
+        case Key.down:
+            ui.selectDown;
+            break;
+        case Key.resize:
+            ui.resize;
+            break;
+        default:
+            break;
         }
     }
-    writeln(result);
+    else
+    {
+        switch (input.chr)
+        {
+        case 13:
+            state.finished = true;
+            state.result = ui.get;
+            break;
+        case 127:
+            if (state.pattern.length > 0)
+            {
+                state.pattern = state.pattern[0 .. $ - 1];
+                model.update(state.pattern);
+            }
+            break;
+        default:
+            state.pattern ~= input.chr;
+            model.update(state.pattern);
+            break;
+        }
+    }
+    return state;
+}
+
+/// the main
+void main(string[] args)
+{
+
+    auto model = new Model(prepareInput);
+
+    State state = {finished:
+    false, pattern : "", result : ""};
+    {
+        Curses.Config config = {
+        disableEcho:
+            true, initKeypad : true, cursLevel : 0
+        };
+        auto curses = new Curses(config);
+        scope (exit)
+        {
+            destroy(curses);
+        }
+
+        auto screen = curses.stdscr;
+        auto ui = ui(curses, screen, model);
+        while (!state.finished)
+        {
+            auto input = screen.getwch;
+            state = handleKey(input, ui, model, state);
+        }
+    }
+    if (state.result)
+    {
+        writeln(state.result);
+    }
 }
