@@ -288,15 +288,16 @@ void main(string[] args)
             }
             else
             {
-                if (input.chr == 13)
+                switch (input.chr)
                 {
+                case 13:
                     finished = true;
                     result = matchList.get;
-                }
-                else
-                {
+                    break;
+                default:
                     pattern ~= input.chr;
                     ui.update(new Model(all, pattern));
+                    break;
                 }
             }
         }

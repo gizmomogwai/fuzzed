@@ -6,5 +6,9 @@ task :build do
   sh "dub build -c fuzzed"
 end
 
-task :default => [:test, :build]
+task :format do
+    sh "find . -name '*.d' | xargs dfmt -i"
+end
+
+task :default => [:format, :test, :build]
 
