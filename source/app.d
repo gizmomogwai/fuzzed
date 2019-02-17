@@ -9,15 +9,19 @@ import std.range;
 import std.stdio;
 import std.string;
 
-auto attributed(Match match)
+auto attributed(Match match, bool selected)
 {
     Attr[] res;
     res.length = match.value.length;
+    foreach (index, ref a; res)
+    {
+        a = selected ? Attr.bold : Attr.normal;
+    }
     foreach (p; match.positions)
     {
         if (p < res.length)
         {
-            res[p] = Attr.standout;
+            res[p] |= Attr.standout;
         }
     }
     return res;
@@ -104,9 +108,9 @@ class List(S, T)
         auto matches = model.matches[offset .. min(model.matches.length, offset + height)];
         foreach (index, match; matches)
         {
-            screen.addstr(height - index.to!int - 1, 2,
-                    match.value[0 .. min(screen.width - 2, match.value.length)],
-                    match.attributed, OOB.ignore);
+            auto y = height - index.to!int - 1;
+            screen.addstr(y, 2, match.value[0 .. min(screen.width - 2,
+                    match.value.length)], match.attributed(index == selection - offset), OOB.ignore);
         }
         screen.addstr(selectionToScreen, 0, ">");
     }
