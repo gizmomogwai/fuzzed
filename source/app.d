@@ -196,13 +196,20 @@ class Ui(S, T)
 
     auto render()
     {
-        screen.clear;
-        list.render;
-        status.render;
+        try
+        {
+            screen.clear;
+            list.render;
+            status.render;
 
-        screen.refresh;
-        curses.update;
-        return this;
+            screen.refresh;
+            curses.update;
+            return this;
+        }
+        catch (Exception e)
+        {
+            return render;
+        }
     }
 
     auto resize()
