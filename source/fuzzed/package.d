@@ -1,7 +1,5 @@
 module fuzzed;
 
-import std.string;
-
 class Match
 {
     string value;
@@ -36,34 +34,28 @@ auto fuzzyMatch(string value, string pattern)
     return null;
 }
 
-@("empty pattern") unittest
+version (Have_unit_threaded)
 {
     import unit_threaded;
     import unit_threaded.should;
+}
 
+@("empty pattern") unittest
+{
     fuzzyMatch("test", "").shouldNotBeNull;
 }
 
 @("normal match") unittest
 {
-    import unit_threaded;
-    import unit_threaded.should;
-
     fuzzyMatch("test", "tt").positions.shouldEqual([0, 3]);
 }
 
 @("not matching") unittest
 {
-    import unit_threaded;
-    import unit_threaded.should;
-
     fuzzyMatch("test", "test1").shouldBeNull;
 }
 
 @("exact match") unittest
 {
-    import unit_threaded;
-    import unit_threaded.should;
-
     fuzzyMatch("test", "test").positions.shouldEqual([0, 1, 2, 3]);
 }

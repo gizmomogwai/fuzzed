@@ -12,17 +12,12 @@ import std.string;
 /// Produce ncurses attributes array for a string out of a match
 auto attributed(Match match, bool selected)
 {
-    Attr[] res;
-    res.length = match.value.length;
-    foreach (index, ref a; res)
+    Attr[] res = match.value.map!(c => selected ? Attr.bold : Attr.normal).array;
+    foreach (index; match.positions)
     {
-        a = selected ? Attr.bold : Attr.normal;
-    }
-    foreach (p; match.positions)
-    {
-        if (p < res.length)
+        if (index < res.length)
         {
-            res[p] |= Attr.standout;
+            res[index] |= Attr.standout;
         }
     }
     return res;
