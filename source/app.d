@@ -9,6 +9,7 @@ import std.range;
 import std.stdio;
 import std.string;
 
+/// Produce ncurses attributes array for a string out of a match
 auto attributed(Match match, bool selected)
 {
     Attr[] res;
@@ -27,6 +28,7 @@ auto attributed(Match match, bool selected)
     return res;
 }
 
+/// Model for the list and the statusbar
 class Model
 {
     public string[] all;
@@ -38,30 +40,33 @@ class Model
     }
 }
 
+/// The working horse
 class List(S, T)
 {
     S curses;
     T screen;
-    // selection should be between offset and offset+height
+    int height;
     int selection;
     int offset;
-    int totalCount;
+
     Model model;
-    int height;
+
     this(S curses, T screen)
     {
         this.curses = curses;
         this.screen = screen;
         this.selection = 0;
         this.offset = 0;
-        this.height = screen.height - 1;
+        resize;
     }
 
+    /// return selection
     string get()
     {
         return model.matches[selection].value;
     }
 
+    /// update the model
     void update(Model model)
     {
         this.model = model;
@@ -71,7 +76,7 @@ class List(S, T)
 
     void resize()
     {
-        writeln("resize");
+        this.height = screen.height - 1;
     }
 
     private int selectionToScreen()
@@ -84,10 +89,12 @@ class List(S, T)
         if (selection < model.matches.length - 1)
         {
             selection++;
-        }
-        while (selection >= offset + height)
-        {
-            offset++;
+            // correct selection to be in the right range.
+            // we check only the upper limit, as we just incremented the selection
+            while (selection >= offset + height)
+            {
+                offset++;
+            }
         }
     }
 
@@ -96,13 +103,16 @@ class List(S, T)
         if (selection > 0)
         {
             selection--;
-        }
-        while (selection < offset)
-        {
-            offset--;
+            // correct selection to be in the right range.
+            // we check only the lower limit, as we just decremented the selection
+            while (selection < offset)
+            {
+                offset--;
+            }
         }
     }
 
+    /// render the list
     private void render()
     {
         auto matches = model.matches[offset .. min(model.matches.length, offset + height)];
@@ -112,15 +122,17 @@ class List(S, T)
             screen.addstr(y, 2, match.value[0 .. min(screen.width - 2,
                     match.value.length)], match.attributed(index == selection - offset), OOB.ignore);
         }
-        screen.addstr(selectionToScreen, 0, ">");
+        screen.addstr(selectionToScreen, 0, ">", Attr.bold);
     }
 }
 
+/// factory for List(S, T)
 auto list(S, T)(S curses, T screen)
 {
     return new List!(S, T)(curses, screen);
 }
 
+/// Statusline
 class Status(S, T)
 {
     S curses;
@@ -161,11 +173,13 @@ class Status(S, T)
     }
 }
 
+/// factory for Status(S, T)
 auto status(S, T)(S curses, T screen)
 {
     return new Status!(S, T)(curses, screen);
 }
 
+/// The ui made out of List and Status
 class Ui(S, T)
 {
     S curses;
@@ -221,6 +235,7 @@ class Ui(S, T)
     }
 }
 
+/// factory for UI(S, T)
 auto ui(S, T)(S curses, T screen, List!(S, T) list, Status!(S, T) status)
 {
     return new Ui!(S, T)(curses, screen, list, status);
@@ -243,13 +258,8 @@ void main(string[] args)
         stdin.reopen("/dev/tty");
     }
 
-    Curses.Config config;
-    with (config)
-    {
-        disableEcho = true;
-        initKeypad = true;
-        cursLevel = 0;
-    }
+    Curses.Config config = {disableEcho:
+    true, initKeypad : true, cursLevel : 0};
     string result;
     {
         auto curses = new Curses(config);
