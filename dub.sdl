@@ -1,0 +1,30 @@
+name "fuzzed"
+description "A fuzzy finder in dlang."
+authors "Christian Koestlin"
+copyright "Copyright (C) 2019, Christian Koestlin"
+license "MIT"
+dependency "nice-curses" version="~>0.2.4"
+
+configuration "library" {
+  targetType "library"
+  targetPath "out/lib"
+  excludedSourceFiles "source/app.d"
+}
+
+configuration "unittest" {
+  targetType "executable"
+  targetName "unittest"
+  targetPath "out/test"
+
+  excludedSourceFiles "source/app.d"
+  dependency "unit-threaded" version="0.8.0"
+  preBuildCommands "dub run unit-threaded -c gen_ut_main -- -f out/generated/unit-threaded/testsuite.d"
+  mainSourceFile "out/generated/unit-threaded/testsuite.d"
+}
+
+configuration "fuzzed" {
+  targetType "executable"
+  targetName "fuzzed"
+  targetPath "out/exe"
+  mainSourceFile "source/app.d"
+}

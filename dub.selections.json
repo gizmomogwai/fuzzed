@@ -1,0 +1,9 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"gtk-d": "3.8.5",
+		"ncurses": "~master",
+		"nice-curses": "~master",
+		"unit-threaded": "0.8.0"
+	}
+}
