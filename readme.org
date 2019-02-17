@@ -1,0 +1,2 @@
+* Fuzzed
+Commandline fuzzy finder aka "poor mans [[https://github.com/junegunn/fzf][fzf]]" in [[https://dlang.org][dlang]].
