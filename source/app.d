@@ -9,18 +9,18 @@ import std.range;
 import std.stdio;
 import std.string;
 
-/// Produce ncurses attributes array for a string out of a match
-auto attributed(Match match, bool selected)
+/// Produce ncurses attributes array for a stringish thing with highlights and selection style
+auto attributes(T)(T s, ulong[] highlights, bool selected, int offset = 0)
 {
-    Attr[] res = match.value.map!(c => selected ? Attr.bold : Attr.normal).array;
-    foreach (index; match.positions)
+    Attr[] result = s.map!(_ => selected ? Attr.bold : Attr.normal).array;
+    foreach (index; highlights)
     {
-        if (index < res.length)
+        if (index + offset < result.length)
         {
-            res[index] |= Attr.standout;
+            result[index + offset] |= Attr.standout;
         }
     }
-    return res;
+    return result;
 }
 
 /// Model for the list and the statusbar
@@ -32,6 +32,7 @@ class Model
     }
 
     public string[] all;
+    public string pattern;
     public Match[] matches;
     private Listener listener;
     this(string[] all)
@@ -42,7 +43,9 @@ class Model
 
     void update(string pattern)
     {
-        this.matches = all.map!(a => fuzzyMatch(a, pattern)).filter!(a => a !is null).array;
+        this.pattern = pattern;
+        matches = all.map!(line => fuzzyMatch(line, pattern)).filter!(match => match !is null)
+            .array;
         if (listener)
         {
             listener.changed;
@@ -91,14 +94,9 @@ class UiList(S, T)
 
     void resize()
     {
-        height = screen.height - 1;
+        height = screen.height - 2;
         selection = 0;
         offset = 0;
-    }
-
-    private int selectionToScreen()
-    {
-        return height - 1 - selection + offset;
     }
 
     void selectUp()
@@ -136,10 +134,10 @@ class UiList(S, T)
         foreach (index, match; matches)
         {
             auto y = height - index.to!int - 1;
-            auto trimmed = match.value[0 .. min(screen.width - 2, match.value.length)];
-            screen.addstr(y, 2, trimmed, match.attributed(index == selection - offset), OOB.ignore);
+            bool selected = index == selection - offset;
+            auto text = (selected ? "> %s" : "  %s").format(match.value).take(screen.width);
+            screen.addstr(y, 0, text, text.attributes(match.positions, selected, 2), OOB.ignore);
         }
-        screen.addstr(selectionToScreen, 0, ">", Attr.bold);
     }
 }
 
@@ -173,8 +171,11 @@ class UiStatus(S, T)
 
     auto render()
     {
-        screen.addstr(screen.height - 1, 2,
-                "%s/%s".format(model.matches.length, model.all.length));
+        auto trimmedCounter = "%s/%s".format(model.matches.length,
+                model.all.length).take(screen.width - 2);
+        screen.addstr(screen.height - 2, 2, trimmedCounter);
+        auto trimmedPattern = "> %s".format(model.pattern).take(screen.width - 2);
+        screen.addstr(screen.height - 1, 0, trimmedPattern, trimmedPattern.attributes([], true));
         return this;
     }
 
@@ -345,7 +346,6 @@ State handleKey(S, T)(S input, T ui, Model model, State state)
 /// the main
 void main(string[] args)
 {
-
     auto model = new Model(prepareInput);
 
     State state = {finished:

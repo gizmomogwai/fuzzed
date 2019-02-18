@@ -20,7 +20,9 @@ auto fuzzyMatch(string value, string pattern)
     ulong patternIdx = 0;
     while ((valueIdx < value.length) && (patternIdx < pattern.length))
     {
-        if (pattern[patternIdx] == value[valueIdx])
+        import std.uni;
+
+        if (pattern[patternIdx].toLower == value[valueIdx].toLower)
         {
             positions ~= valueIdx;
             patternIdx++;
