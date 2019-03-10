@@ -4,6 +4,7 @@ authors "Christian Koestlin"
 copyright "Copyright (C) 2019, Christian Koestlin"
 license "MIT"
 dependency "nice-curses" version="~>0.2.4"
+dependency "colored" version="~>0.0.20"
 
 configuration "library" {
   targetType "library"

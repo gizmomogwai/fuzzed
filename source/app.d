@@ -1,10 +1,13 @@
 import fuzzed;
+
+import colored;
+import deimos.ncurses;
 import nice.ui.elements;
 import std.algorithm;
 import std.array;
+import std.concurrency;
 import std.conv;
 import std.format;
-import std.range;
 import std.range;
 import std.stdio;
 import std.string;
