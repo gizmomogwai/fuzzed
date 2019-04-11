@@ -13,7 +13,7 @@ import std.stdio;
 import std.string;
 
 /// Produce ncurses attributes array for a stringish thing with highlights and selection style
-auto attributes(T)(T s, ulong[] highlights, bool selected, int offset = 0)
+auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset = 0)
 {
     Attr[] result = s.map!(_ => selected ? Attr.bold : Attr.normal).array;
     foreach (index; highlights)
@@ -26,42 +26,74 @@ auto attributes(T)(T s, ulong[] highlights, bool selected, int offset = 0)
     return result;
 }
 
+struct StatusInfo
+{
+    ulong matches;
+    ulong all;
+    string pattern;
+    struct Request
+    {
+        Tid tid;
+    }
+}
+
+struct Pattern
+{
+    string pattern;
+}
+
+struct Matches
+{
+    immutable(Match)[] matches;
+    struct Request
+    {
+        Tid tid;
+        ulong offset;
+        ulong height;
+    }
+}
+
 /// Model for the list and the statusbar
 class Model
 {
-    interface Listener
-    {
-        void changed();
-    }
-
     public string[] all;
     public string pattern;
     public Match[] matches;
-    private Listener listener;
-    this(string[] all)
+    this()
     {
-        this.all = all;
+        all = [];
         update("");
+    }
+
+    void append(string line)
+    {
+        all ~= line;
     }
 
     void update(string pattern)
     {
         this.pattern = pattern;
-        matches = all.map!(line => fuzzyMatch(line, pattern)).filter!(match => match !is null)
-            .array;
-        if (listener)
-        {
-            listener.changed;
-        }
-    }
-
-    auto setListener(Listener listener)
-    {
-        this.listener = listener;
-        listener.changed;
-        return this;
+        this.matches = all.map!(line => fuzzyMatch(line, pattern))
+            .filter!(match => match !is null).array;
     }
 }
+
+void modelLoop()
+{
+    auto model = new Model;
+    bool finished = false;
+    while (!finished)
+    {
+        receive((Pattern pattern) { model.update(pattern.pattern); }, (string line) {
+            model.append(line);
+        }, (StatusInfo.Request request) {
+            request.tid.send(StatusInfo(model.matches.length, model.all.length, model.pattern));
+        }, (Matches.Request request) {
+            request.tid.send(Matches(cast(immutable(Match)[]) model.matches.dup));
+        }, (OwnerTerminated terminated) { finished = true; },);
+    }
+}
+
 /// The working horse
 class UiList(S, T)
 {
@@ -71,9 +103,10 @@ class UiList(S, T)
     int selection;
     int offset;
 
-    Model model;
+    Tid model;
+    immutable(Match)[] allMatches;
 
-    this(S curses, T screen, Model model)
+    this(S curses, T screen, Tid model)
     {
         this.curses = curses;
         this.screen = screen;
@@ -86,13 +119,7 @@ class UiList(S, T)
     /// return selection
     string get()
     {
-        return model.matches[selection].value;
-    }
-
-    void changed()
-    {
-        offset = 0;
-        selection = 0;
+        return allMatches[selection].value;
     }
 
     void resize()
@@ -104,7 +131,7 @@ class UiList(S, T)
 
     void selectUp()
     {
-        if (selection < model.matches.length - 1)
+        if (selection < allMatches.length - 1)
         {
             selection++;
             // correct selection to be in the right range.
@@ -133,7 +160,10 @@ class UiList(S, T)
     /// render the list
     private void render()
     {
-        auto matches = model.matches[offset .. min(model.matches.length, offset + height)];
+        model.send(Matches.Request(thisTid, height, offset));
+        receive((Matches response) { allMatches = response.matches; },);
+        auto matches = allMatches[min(allMatches.length,
+                offset) .. min(allMatches.length, offset + height)];
         foreach (index, match; matches)
         {
             auto y = height - index.to!int - 1;
@@ -145,7 +175,7 @@ class UiList(S, T)
 }
 
 /// factory for List(S, T)
-auto uiList(S, T)(S curses, T screen, Model model)
+auto uiList(S, T)(S curses, T screen, Tid model)
 {
     return new UiList!(S, T)(curses, screen, model);
 }
@@ -155,16 +185,12 @@ class UiStatus(S, T)
 {
     S curses;
     T screen;
-    Model model;
-    this(S curses, T screen, Model model)
+    Tid model;
+    this(S curses, T screen, Tid model)
     {
         this.curses = curses;
         this.screen = screen;
         this.model = model;
-    }
-
-    void changed()
-    {
     }
 
     auto resize()
@@ -174,10 +200,18 @@ class UiStatus(S, T)
 
     auto render()
     {
-        auto trimmedCounter = "%s/%s".format(model.matches.length,
-                model.all.length).take(screen.width - 2);
+        model.send(StatusInfo.Request(thisTid));
+        StatusInfo statusInfo;
+        receive((StatusInfo response) { statusInfo = response; });
+
+        auto matches = statusInfo.matches;
+        auto all = statusInfo.all;
+        auto pattern = statusInfo.pattern;
+
+        auto trimmedCounter = "%s/%s".format(matches, all).take(screen.width - 2);
         screen.addstr(screen.height - 2, 2, trimmedCounter);
-        auto trimmedPattern = "> %s".format(model.pattern).take(screen.width - 2);
+
+        auto trimmedPattern = "> %s".format(pattern).take(screen.width - 2);
         screen.addstr(screen.height - 1, 0, trimmedPattern, trimmedPattern.attributes([], true));
         return this;
     }
@@ -194,25 +228,24 @@ class UiStatus(S, T)
 }
 
 /// factory for Status(S, T)
-auto uiStatus(S, T)(S curses, T screen, Model model)
+auto uiStatus(S, T)(S curses, T screen, Tid model)
 {
     return new UiStatus!(S, T)(curses, screen, model);
 }
 
 /// The ui made out of List and Status
-class Ui(S, T) : Model.Listener
+class Ui(S, T)
 {
     S curses;
     T screen;
     UiList!(S, T) list;
     UiStatus!(S, T) status;
-    this(S curses, T screen, Model model)
+    this(S curses, T screen, Tid model)
     {
         this.curses = curses;
         this.screen = screen;
         this.list = uiList(curses, screen, model);
         this.status = uiStatus(curses, screen, model);
-        model.setListener(this);
     }
 
     auto get()
@@ -249,13 +282,6 @@ class Ui(S, T) : Model.Listener
         return render;
     }
 
-    void changed()
-    {
-        list.changed;
-        status.changed;
-        render;
-    }
-
     auto selectUp()
     {
         list.selectUp;
@@ -272,26 +298,9 @@ class Ui(S, T) : Model.Listener
 }
 
 /// factory for UI(S, T)
-auto ui(S, T)(S curses, T screen, Model model)
+auto ui(S, T)(S curses, T screen, Tid model)
 {
     return new Ui!(S, T)(curses, screen, model);
-}
-
-/// reopen a tty input if we got piped in
-string[] prepareInput()
-{
-    import core.sys.posix.unistd;
-
-    if (!isatty(0))
-    {
-        string[] res = stdin.byLineCopy.map!(s => s.strip).array;
-        stdin.reopen("/dev/tty");
-        return res;
-    }
-    else
-    {
-        return [];
-    }
 }
 
 /// State of the search
@@ -303,7 +312,7 @@ struct State
 }
 
 /// handle input events
-State handleKey(S, T)(S input, T ui, Model model, State state)
+State handleKey(S, T)(S input, T ui, Tid model, State state)
 {
     if (input.isSpecialKey)
     {
@@ -334,30 +343,77 @@ State handleKey(S, T)(S input, T ui, Model model, State state)
             if (state.pattern.length > 0)
             {
                 state.pattern = state.pattern[0 .. $ - 1];
-                model.update(state.pattern);
+                model.send(Pattern(state.pattern));
             }
             break;
         default:
             state.pattern ~= input.chr;
-            model.update(state.pattern);
+            model.send(Pattern(state.pattern));
             break;
         }
     }
     return state;
 }
 
+import std.stdio;
+
+void readerLoop(shared Wrapper input, Tid model)
+{
+
+    foreach (string line; lines((cast() input).o))
+    {
+        model.send(line.strip.idup);
+    }
+}
+
+class Wrapper
+{
+    File o;
+    this(File o)
+    {
+        this.o = o;
+    }
+
+    ubyte[] read(ubyte[] buffer)
+    {
+        return (cast() o).rawRead(buffer);
+    }
+}
+
 /// the main
 void main(string[] args)
 {
-    auto model = new Model(prepareInput);
 
-    State state = {finished:
-    false, pattern : "", result : ""};
+    import core.sys.posix.unistd;
+    import std.stdio;
+
+    File copy;
+    copy.fdopen(dup(stdin.fileno));
+
+    shared w = cast(shared)(new Wrapper(copy));
+
+    stdin.reopen("/dev/tty");
+
+    auto model = spawnLinked(&modelLoop);
+    auto reader = spawnLinked(&readerLoop, w, model);
+
+    // dfmt off
+    State state =
     {
-        Curses.Config config = {
-        disableEcho:
-            true, initKeypad : true, cursLevel : 0
+        finished: false,
+        pattern : "",
+        result : "",
+    };
+    // dfmt on
+    {
+        // dfmt off
+        Curses.Config config =
+        {
+            disableEcho: true,
+            initKeypad : true,
+            cursLevel : 0,
         };
+        // dfmt on
         auto curses = new Curses(config);
         scope (exit)
         {
@@ -365,11 +421,24 @@ void main(string[] args)
         }
 
         auto screen = curses.stdscr;
+        screen.timeout(100);
         auto ui = ui(curses, screen, model);
+        ui.render;
         while (!state.finished)
         {
-            auto input = screen.getwch;
-            state = handleKey(input, ui, model, state);
+            try
+            {
+                auto input = screen.getwch;
+                state = handleKey(input, ui, model, state);
+            }
+            catch (Exception e)
+            {
+                writeln("...", e);
+            }
+            finally
+            {
+                ui.render;
+            }
         }
     }
     if (state.result)
