@@ -227,8 +227,10 @@ class UiList(S, T)
         //dfmt on
 
         adjustOffsetAndSelection;
-        auto matches = allMatches[min(allMatches.length,
-                details.offset) .. min(allMatches.length, details.offset + height)];
+        // dfmt off
+        auto matches = allMatches[
+            min(allMatches.length, details.offset) .. min(allMatches.length, details.offset + height)];
+        // dfmt on
         foreach (index, match; matches)
         {
             auto y = height - index.to!int - 1;
@@ -269,12 +271,14 @@ class UiStatus(S, T)
     {
         model.send(StatusInfo.Request(thisTid));
         StatusInfo statusInfo;
+        // dfmt off
         receive(
             (StatusInfo response)
             {
                 statusInfo = response;
             },
         );
+        // dfmt on
 
         auto matches = statusInfo.matches;
         auto all = statusInfo.all;
@@ -433,12 +437,15 @@ import std.stdio;
 
 void readerLoop(shared Wrapper input, Tid model)
 {
-    try {
+    try
+    {
         foreach (string line; lines((cast() input).o))
         {
             model.send(line.strip.idup);
         }
-    } catch (Exception e) {
+    }
+    catch (Exception e)
+    {
     }
 }
 
@@ -475,21 +482,21 @@ void main(string[] args)
 
     // dfmt off
     State state =
-    {
-        finished: false,
-        pattern : "",
-        result : "",
-    };
+        {
+            finished: false,
+            pattern : "",
+            result : "",
+        };
     // dfmt on
     {
         // dfmt off
         Curses.Config config =
-        {
-            disableEcho: true,
-            initKeypad : true,
-            cursLevel : 0,
-            mode : Curses.Mode.halfdelay,
-        };
+            {
+                disableEcho: true,
+                initKeypad : true,
+                cursLevel : 0,
+                mode : Curses.Mode.halfdelay,
+            };
         // dfmt on
         auto curses = new Curses(config);
         scope (exit)
