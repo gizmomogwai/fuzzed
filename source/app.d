@@ -217,12 +217,12 @@ class UiList(S, T)
         model.send(Matches.Request(thisTid, height, details.offset));
         //dfmt off
         receive(
-          (Matches response)
-          {
-              allMatches = response.matches;
-              details.total = response.total;
-              details.matches = allMatches.length;
-          },
+            (Matches response)
+            {
+                allMatches = response.matches;
+                details.total = response.total;
+                details.matches = allMatches.length;
+            },
         );
         //dfmt on
 
@@ -269,7 +269,12 @@ class UiStatus(S, T)
     {
         model.send(StatusInfo.Request(thisTid));
         StatusInfo statusInfo;
-        receive((StatusInfo response) { statusInfo = response; });
+        receive(
+            (StatusInfo response)
+            {
+                statusInfo = response;
+            },
+        );
 
         auto matches = statusInfo.matches;
         auto all = statusInfo.all;
@@ -428,10 +433,12 @@ import std.stdio;
 
 void readerLoop(shared Wrapper input, Tid model)
 {
-
-    foreach (string line; lines((cast() input).o))
-    {
-        model.send(line.strip.idup);
+    try {
+        foreach (string line; lines((cast() input).o))
+        {
+            model.send(line.strip.idup);
+        }
+    } catch (Exception e) {
     }
 }
 
@@ -456,10 +463,10 @@ void main(string[] args)
     import core.sys.posix.unistd;
     import std.stdio;
 
-    File copy;
-    copy.fdopen(dup(stdin.fileno));
+    File originalStdin;
+    originalStdin.fdopen(dup(stdin.fileno));
 
-    shared w = cast(shared)(new Wrapper(copy));
+    shared w = cast(shared)(new Wrapper(originalStdin));
 
     stdin.reopen("/dev/tty");
 
@@ -509,6 +516,7 @@ void main(string[] args)
                 ui.render;
             }
         }
+        originalStdin.close;
     }
     if (state.result)
     {
