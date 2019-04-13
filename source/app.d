@@ -45,6 +45,7 @@ struct Pattern
 struct Matches
 {
     immutable(Match)[] matches;
+    ulong total;
     struct Request
     {
         Tid tid;
@@ -68,13 +69,27 @@ class Model
     void append(string line)
     {
         all ~= line;
+        auto match = fuzzyMatch(line, pattern);
+        if (match)
+        {
+            this.matches ~= match;
+        }
     }
 
     void update(string pattern)
     {
         this.pattern = pattern;
-        this.matches = all.map!(line => fuzzyMatch(line, pattern))
-            .filter!(match => match !is null).array;
+        updateMatches;
+    }
+
+    void updateMatches()
+    {
+        // dfmt off
+        this.matches = all
+            .map!(line => fuzzyMatch(line, pattern))
+            .filter!(match => match !is null)
+            .array;
+        // dftm on
     }
 }
 
@@ -84,24 +99,47 @@ void modelLoop()
     bool finished = false;
     while (!finished)
     {
-        receive((Pattern pattern) { model.update(pattern.pattern); }, (string line) {
-            model.append(line);
-        }, (StatusInfo.Request request) {
-            request.tid.send(StatusInfo(model.matches.length, model.all.length, model.pattern));
-        }, (Matches.Request request) {
-            request.tid.send(Matches(cast(immutable(Match)[]) model.matches.dup));
-        }, (OwnerTerminated terminated) { finished = true; },);
+        //dfmt off
+        receive(
+            (Pattern pattern)
+            {
+                model.update(pattern.pattern);
+            },
+            (string line)
+            {
+                model.append(line);
+            },
+            (StatusInfo.Request request)
+            {
+                request.tid.send(StatusInfo(model.matches.length, model.all.length, model.pattern));
+            },
+            (Matches.Request request)
+            {
+                request.tid.send(Matches(cast(immutable(Match)[]) model.matches.dup, model.all.length));
+            },
+            (OwnerTerminated terminated)
+            {
+                finished = true;
+            },
+        );
+        // dfmt on
     }
 }
 
+class Details
+{
+    ulong total;
+    ulong matches;
+    ulong offset;
+    ulong selection;
+}
 /// The working horse
 class UiList(S, T)
 {
     S curses;
     T screen;
     int height;
-    int selection;
-    int offset;
+    Details details;
 
     Tid model;
     immutable(Match)[] allMatches;
@@ -110,8 +148,7 @@ class UiList(S, T)
     {
         this.curses = curses;
         this.screen = screen;
-        this.selection = 0;
-        this.offset = 0;
+        this.details = new Details;
         this.model = model;
         resize;
     }
@@ -119,55 +156,83 @@ class UiList(S, T)
     /// return selection
     string get()
     {
-        return allMatches[selection].value;
+        if (details.selection == -1)
+        {
+            return "";
+        }
+        return allMatches[details.selection].value;
     }
 
     void resize()
     {
         height = screen.height - 2;
-        selection = 0;
-        offset = 0;
+        details.offset = 0;
+        details.selection = 0;
     }
 
     void selectUp()
     {
-        if (selection < allMatches.length - 1)
+        if (details.selection < allMatches.length - 1)
         {
-            selection++;
+            details.selection++;
             // correct selection to be in the right range.
             // we check only the upper limit, as we just incremented the selection
-            while (selection >= offset + height)
+            while (details.selection >= details.offset + height)
             {
-                offset++;
+                details.offset++;
             }
         }
     }
 
     void selectDown()
     {
-        if (selection > 0)
+        if (details.selection > 0)
         {
-            selection--;
+            details.selection--;
             // correct selection to be in the right range.
             // we check only the lower limit, as we just decremented the selection
-            while (selection < offset)
+            while (details.selection < details.offset)
             {
-                offset--;
+                details.offset--;
             }
         }
     }
 
+    private void adjustOffsetAndSelection()
+    {
+        details.selection = min(details.selection, allMatches.length - 1);
+
+        if (allMatches.length < height)
+        {
+            details.offset = 0;
+        }
+        if (details.selection < details.offset)
+        {
+            details.offset = details.selection;
+        }
+    }
     /// render the list
     private void render()
     {
-        model.send(Matches.Request(thisTid, height, offset));
-        receive((Matches response) { allMatches = response.matches; },);
+        model.send(Matches.Request(thisTid, height, details.offset));
+        //dfmt off
+        receive(
+          (Matches response)
+          {
+              allMatches = response.matches;
+              details.total = response.total;
+              details.matches = allMatches.length;
+          },
+        );
+        //dfmt on
+
+        adjustOffsetAndSelection;
         auto matches = allMatches[min(allMatches.length,
-                offset) .. min(allMatches.length, offset + height)];
+                details.offset) .. min(allMatches.length, details.offset + height)];
         foreach (index, match; matches)
         {
             auto y = height - index.to!int - 1;
-            bool selected = index == selection - offset;
+            bool selected = index == details.selection - details.offset;
             auto text = (selected ? "> %s" : "  %s").format(match.value).take(screen.width);
             screen.addstr(y, 0, text, text.attributes(match.positions, selected, 2), OOB.ignore);
         }
@@ -186,11 +251,13 @@ class UiStatus(S, T)
     S curses;
     T screen;
     Tid model;
-    this(S curses, T screen, Tid model)
+    Details details;
+    this(S curses, T screen, Tid model, Details details)
     {
         this.curses = curses;
         this.screen = screen;
         this.model = model;
+        this.details = details;
     }
 
     auto resize()
@@ -208,7 +275,8 @@ class UiStatus(S, T)
         auto all = statusInfo.all;
         auto pattern = statusInfo.pattern;
 
-        auto trimmedCounter = "%s/%s".format(matches, all).take(screen.width - 2);
+        auto trimmedCounter = "%s/%s (selection %s/offset %s)".format(details.matches,
+                details.total, details.selection, details.offset).take(screen.width - 2);
         screen.addstr(screen.height - 2, 2, trimmedCounter);
 
         auto trimmedPattern = "> %s".format(pattern).take(screen.width - 2);
@@ -228,9 +296,9 @@ class UiStatus(S, T)
 }
 
 /// factory for Status(S, T)
-auto uiStatus(S, T)(S curses, T screen, Tid model)
+auto uiStatus(S, T)(S curses, T screen, Tid model, Details details)
 {
-    return new UiStatus!(S, T)(curses, screen, model);
+    return new UiStatus!(S, T)(curses, screen, model, details);
 }
 
 /// The ui made out of List and Status
@@ -245,7 +313,7 @@ class Ui(S, T)
         this.curses = curses;
         this.screen = screen;
         this.list = uiList(curses, screen, model);
-        this.status = uiStatus(curses, screen, model);
+        this.status = uiStatus(curses, screen, model, this.list.details);
     }
 
     auto get()
@@ -267,11 +335,12 @@ class Ui(S, T)
             // ncurses
             screen.refresh;
             curses.update;
+
             return this;
         }
         catch (Exception e)
         {
-            return render;
+            return this;
         }
     }
 
@@ -412,6 +481,7 @@ void main(string[] args)
             disableEcho: true,
             initKeypad : true,
             cursLevel : 0,
+            mode : Curses.Mode.halfdelay,
         };
         // dfmt on
         auto curses = new Curses(config);
@@ -419,11 +489,10 @@ void main(string[] args)
         {
             destroy(curses);
         }
-
         auto screen = curses.stdscr;
-        screen.timeout(100);
+        screen.timeout(50);
+
         auto ui = ui(curses, screen, model);
-        ui.render;
         while (!state.finished)
         {
             try
@@ -433,7 +502,7 @@ void main(string[] args)
             }
             catch (Exception e)
             {
-                writeln("...", e);
+                //                writeln("...", e);
             }
             finally
             {
