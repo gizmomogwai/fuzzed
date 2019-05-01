@@ -12,20 +12,20 @@ import std.stdio;
 import std.string;
 
 /// Produce ncurses attributes array for a stringish thing with highlights and selection style
-/*
-  auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset = 0)
-  {
-  Attr[] result = s.map!(_ => selected ? Attr.bold : Attr.normal).array;
-  foreach (index; highlights)
-  {
-  if (index + offset < result.length)
-  {
-  result[index + offset] |= Attr.standout;
-  }
-  }
-  return result;
-  }
-*/
+
+auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset = 0)
+{
+    Attr[] result = s.map!(_ => selected ? Attr.bold : Attr.normal).array;
+    foreach (index; highlights)
+    {
+        if (index + offset < result.length)
+        {
+            result[index + offset] |= Attr.standout;
+        }
+    }
+    return result;
+}
+
 struct StatusInfo
 {
     ulong matches;
@@ -241,7 +241,7 @@ class UiList(S)
             bool selected = index == details.selection - details.offset;
             auto text = (selected ? "> %s" : "  %s").format(match.value)
                 .take(screen.width).to!string;
-            screen.addstr(y, 0, text); //, text.attributes(match.positions, selected, 2), OOB.ignore);
+            screen.addstr(y, 0, text, text.attributes(match.positions, selected, 2), OOB.ignore);
         }
     }
 }
@@ -292,7 +292,7 @@ class UiStatus(S)
         screen.addstr(screen.height - 2, 2, trimmedCounter);
 
         auto trimmedPattern = "> %s".format(pattern).take(screen.width - 2).to!string;
-        screen.addstr(screen.height - 1, 0, trimmedPattern); //.attributes([], true));
+        screen.addstr(screen.height - 1, 0, trimmedPattern, trimmedPattern.attributes([], true));
         return this;
     }
 
@@ -389,6 +389,34 @@ struct State
     string result;
     string pattern;
 }
+
+enum OOB
+{
+    ignore,
+    except
+}
+
+enum Attr: chtype
+{
+    normal     = A_NORMAL,
+        charText   = A_CHARTEXT,
+        color      = A_COLOR,
+        standout   = A_STANDOUT,
+        underline  = A_UNDERLINE,
+        reverse    = A_REVERSE,
+        blink      = A_BLINK,
+        dim        = A_DIM,
+        bold       = A_BOLD,
+        altCharSet = A_ALTCHARSET,
+        invis      = A_INVIS,
+        protect    = A_PROTECT,
+        horizontal = A_HORIZONTAL,
+        left       = A_LEFT,
+        low        = A_LOW,
+        right      = A_RIGHT,
+        top        = A_TOP,
+        vertical   = A_VERTICAL,
+        }
 
 enum Key : int
 {
@@ -576,7 +604,6 @@ State handleKey(S, T)(S input, T ui, Tid model, State state)
       }
       else
       {
-          model.send(Input(input.character));
           switch (input.character)
           {
           case 10:
@@ -627,6 +654,76 @@ class Wrapper
     {
         return (cast() o).rawRead(buffer);
     }
+}
+
+struct CChar
+{
+    wint_t[] chars;
+    chtype attr;
+
+    this(wint_t chr, chtype attr = Attr.normal)
+    {
+        chars = [chr];
+        this.attr = attr;
+    }
+
+    this(const wint_t[] chars, chtype attr = Attr.normal)
+    {
+        this.chars = chars.dup;
+        this.attr = attr;
+    }
+
+    this(const string chars, chtype attr = Attr.normal)
+    {
+        import std.conv;
+
+        this.chars = chars.to!(wint_t[]);
+        this.attr = attr;
+    }
+
+    bool opBinary(op)(wint_t chr)
+        if (op == "==")
+        {
+            return chars[0] == chr;
+        }
+
+    alias cchar this;
+
+    cchar_t cchar() const @property
+    {
+        return prepChar(chars, attr);
+    }
+}
+
+/* Prepare a wide character for drawing. */
+cchar_t prepChar(C: wint_t, A: chtype)(C ch, A attr)
+{
+    import core.stdc.stddef: wchar_t;
+
+    cchar_t res;
+    wchar_t[] str = [ch, 0];
+    setcchar(&res, str.ptr, attr, PAIR_NUMBER(attr), null);
+    return res;
+}
+
+cchar_t prepChar(C: wint_t, A: chtype)(const C[] chars, A attr)
+{
+    import core.stdc.stddef: wchar_t;
+    import std.array;
+    import std.range;
+
+    cchar_t res;
+    version(Win32) {
+        import std.conv: wtext;
+        const wchar_t[] str = (chars.take(CCHARW_MAX).wtext) ~ 0;
+    } else {
+        const wchar_t[] str = (chars.take(CCHARW_MAX).array) ~ 0;
+    }
+    /* Hmm, 'const' modifiers apparently were lost during porting the library
+       from C to D.
+    */
+    setcchar(&res, cast(wchar_t*) str.ptr, attr, PAIR_NUMBER(attr), null);
+    return res;
 }
 
 class Screen
@@ -686,6 +783,84 @@ class Screen
         deimos.ncurses.curses.move(y, x);
         deimos.ncurses.curses.addstr(text.toStringz);
         return this;
+    }
+
+
+    void addch(C: wint_t, A: chtype)(C ch, A attr = Attr.normal)
+    {
+        bool isLowerRight = (curY == height - 1) && (curX == width - 1);
+        auto toDraw = prepChar(ch, attr);
+        if (deimos.ncurses.curses.wadd_wch(ptr, &toDraw) != OK && !isLowerRight)
+            throw new Exception("Failed to add character '%s'", ch);
+    }
+
+    /* Coords, n, multiple attrs */
+    void addstr(String, Range)(int y,
+                               int x,
+                               String str,
+                               Range attrs,
+                               OOB onOOB = OOB.ignore)
+    {
+        /* Move first. */
+        try {
+            deimos.ncurses.curses.move(y, x);
+            addnstr(str, attrs);
+        } catch (Exception e) {
+            throw new Exception("Failed to write string '%s' at %s:%s".format(str, y, x));
+        }
+        /* Write second. */
+        try {
+        } catch (Exception e) {
+            if (onOOB == OOB.except)
+                throw new Exception("An out-of-bounds condition was encountered when writing string '%s' at %s:%s".format(str, y, x));
+        }
+    }
+
+    int currentX() @property
+    {
+        return deimos.ncurses.curses.getcurx(this.window);
+    }
+
+    int currentY() @property
+    {
+        return deimos.ncurses.curses.getcury(this.window);
+    }
+
+
+    void addch(C: cchar_t)(C ch)
+    {
+        bool isLowerRight = (currentY == height - 1) && (currentX == width - 1);
+        cchar_t cchar = ch;
+        if (deimos.ncurses.curses.wadd_wch(this.window, &cchar) != OK && !isLowerRight)
+            throw new Exception("Failed to add complex character '%s'".format(ch));
+
+    }
+
+    void addnstr(String, Range)(String str,
+                                Range attrs,
+                                OOB onOOB = OOB.ignore)
+    {
+        import std.array;
+        import std.conv;
+        import std.range;
+        import std.uni;
+        auto grs = str.byGrapheme;
+        foreach (gr; str.byGrapheme) {
+            if (attrs.empty) break;
+            string chr = text(gr[].array);
+            auto attr = attrs.front;
+            attrs.popFront;
+            auto c = CChar(chr, attr);
+            try {
+                addch(c);
+            } catch (Exception e) {
+                if (onOOB == OOB.ignore)
+                    break;
+                else
+                    throw new Exception("An out-of-bounds condition was " ~
+                                        "encountered when writing string '%s'", str);
+            }
+        } /* foreach grapheme */
     }
 
     auto getwch()
