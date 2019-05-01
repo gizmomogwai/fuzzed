@@ -1,5 +1,7 @@
 module fuzzed;
 
+public import fuzzed.screen;
+
 class Match
 {
     string value;
