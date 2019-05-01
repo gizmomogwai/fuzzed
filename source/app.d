@@ -12,7 +12,6 @@ import std.stdio;
 import std.string;
 
 /// Produce ncurses attributes array for a stringish thing with highlights and selection style
-
 auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset = 0)
 {
     Attr[] result = s.map!(_ => selected ? Attr.bold : Attr.normal).array;
@@ -26,113 +25,7 @@ auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset 
     return result;
 }
 
-struct StatusInfo
-{
-    ulong matches;
-    ulong all;
-    string pattern;
-    struct Request
-    {
-        Tid tid;
-    }
-}
 
-struct Pattern
-{
-    string pattern;
-}
-
-struct Input
-{
-    int i;
-}
-
-struct Matches
-{
-    immutable(Match)[] matches;
-    ulong total;
-    struct Request
-    {
-        Tid tid;
-        ulong offset;
-        ulong height;
-    }
-}
-
-/// Model for the list and the statusbar
-class Model
-{
-    public string[] all;
-    public string pattern;
-    public Match[] matches;
-    this()
-    {
-        all = [];
-        update("");
-    }
-
-    void append(string line)
-    {
-        all ~= line;
-        auto match = fuzzyMatch(line, pattern);
-        if (match)
-        {
-            this.matches ~= match;
-        }
-    }
-
-    void update(string pattern)
-    {
-        this.pattern = pattern;
-        updateMatches;
-    }
-
-    void updateMatches()
-    {
-        // dfmt off
-        this.matches = all
-            .map!(line => fuzzyMatch(line, pattern))
-            .filter!(match => match !is null)
-            .array;
-        // dftm on
-    }
-}
-
-void modelLoop()
-{
-    auto model = new Model;
-    bool finished = false;
-    while (!finished)
-    {
-        //dfmt off
-        receive(
-          (Pattern pattern)
-          {
-              model.update(pattern.pattern);
-          },
-          (string line)
-          {
-              model.append(line);
-          },
-          (StatusInfo.Request request)
-          {
-              request.tid.send(StatusInfo(model.matches.length, model.all.length, model.pattern));
-          },
-          (Matches.Request request)
-          {
-              request.tid.send(Matches(cast(immutable(Match)[]) model.matches.dup, model.all.length));
-          },
-          (OwnerTerminated terminated)
-          {
-              finished = true;
-          },
-          (Input input)
-          {   model.append("%s".format(input.i));
-          },
-        );
-        // dfmt on
-    }
-}
 
 class Details
 {
@@ -289,7 +182,7 @@ class UiStatus(S)
         auto pattern = statusInfo.pattern;
 
         auto trimmedCounter = "%s/%s (selection %s/offset %s)".format(details.matches,
-                details.total, details.selection, details.offset).take(screen.width - 2).to!string;
+                                                                      details.total, details.selection, details.offset).take(screen.width - 2).to!string;
         screen.addstr(screen.height - 2, 2, trimmedCounter);
 
         auto trimmedPattern = "> %s".format(pattern).take(screen.width - 2).to!string;
@@ -394,68 +287,68 @@ struct State
 enum Key : int
 {
     codeYes = KEY_CODE_YES,
-    min = KEY_MIN,
-    codeBreak = KEY_BREAK,
-    down = KEY_DOWN,
-    up = KEY_UP,
-    left = KEY_LEFT,
-    right = KEY_RIGHT,
-    home = KEY_HOME,
-    backspace = KEY_BACKSPACE,
-    f0 = KEY_F0,
-    f1 = KEY_F(1),
-    f2 = KEY_F(2),
-    f3 = KEY_F(3),
-    f4 = KEY_F(4),
-    f5 = KEY_F(5),
-    f6 = KEY_F(6),
-    f7 = KEY_F(7),
-    f8 = KEY_F(8),
-    f9 = KEY_F(9),
-    f10 = KEY_F(10),
-    f11 = KEY_F(11),
-    f12 = KEY_F(12),
-    f13 = KEY_F(13),
-    f14 = KEY_F(14),
-    f15 = KEY_F(15),
-    f16 = KEY_F(16),
-    f17 = KEY_F(17),
-    f18 = KEY_F(18),
-    f19 = KEY_F(19),
-    f20 = KEY_F(20),
-    f21 = KEY_F(21),
-    f22 = KEY_F(22),
-    f23 = KEY_F(23),
-    f24 = KEY_F(24),
-    f25 = KEY_F(25),
-    f26 = KEY_F(26),
-    f27 = KEY_F(27),
-    f28 = KEY_F(28),
-    f29 = KEY_F(29),
-    f30 = KEY_F(30),
-    f31 = KEY_F(31),
-    f32 = KEY_F(32),
-    f33 = KEY_F(33),
-    f34 = KEY_F(34),
-    f35 = KEY_F(35),
-    f36 = KEY_F(36),
-    f37 = KEY_F(37),
-    f38 = KEY_F(38),
-    f39 = KEY_F(39),
-    f40 = KEY_F(40),
-    f41 = KEY_F(41),
-    f42 = KEY_F(42),
-    f43 = KEY_F(43),
-    f44 = KEY_F(44),
-    f45 = KEY_F(45),
-    f46 = KEY_F(46),
-    f47 = KEY_F(47),
-    f48 = KEY_F(48),
-    f49 = KEY_F(49),
-    f50 = KEY_F(50),
-    f51 = KEY_F(51),
-    f52 = KEY_F(52),
-    f53 = KEY_F(53),
+        min = KEY_MIN,
+        codeBreak = KEY_BREAK,
+        down = KEY_DOWN,
+        up = KEY_UP,
+        left = KEY_LEFT,
+        right = KEY_RIGHT,
+        home = KEY_HOME,
+        backspace = KEY_BACKSPACE,
+        f0 = KEY_F0,
+        f1 = KEY_F(1),
+        f2 = KEY_F(2),
+        f3 = KEY_F(3),
+        f4 = KEY_F(4),
+        f5 = KEY_F(5),
+        f6 = KEY_F(6),
+        f7 = KEY_F(7),
+        f8 = KEY_F(8),
+        f9 = KEY_F(9),
+        f10 = KEY_F(10),
+        f11 = KEY_F(11),
+        f12 = KEY_F(12),
+        f13 = KEY_F(13),
+        f14 = KEY_F(14),
+        f15 = KEY_F(15),
+        f16 = KEY_F(16),
+        f17 = KEY_F(17),
+        f18 = KEY_F(18),
+        f19 = KEY_F(19),
+        f20 = KEY_F(20),
+        f21 = KEY_F(21),
+        f22 = KEY_F(22),
+        f23 = KEY_F(23),
+        f24 = KEY_F(24),
+        f25 = KEY_F(25),
+        f26 = KEY_F(26),
+        f27 = KEY_F(27),
+        f28 = KEY_F(28),
+        f29 = KEY_F(29),
+        f30 = KEY_F(30),
+        f31 = KEY_F(31),
+        f32 = KEY_F(32),
+        f33 = KEY_F(33),
+        f34 = KEY_F(34),
+        f35 = KEY_F(35),
+        f36 = KEY_F(36),
+        f37 = KEY_F(37),
+        f38 = KEY_F(38),
+        f39 = KEY_F(39),
+        f40 = KEY_F(40),
+        f41 = KEY_F(41),
+        f42 = KEY_F(42),
+        f43 = KEY_F(43),
+        f44 = KEY_F(44),
+        f45 = KEY_F(45),
+        f46 = KEY_F(46),
+        f47 = KEY_F(47),
+        f48 = KEY_F(48),
+        f49 = KEY_F(49),
+        f50 = KEY_F(50),
+        f51 = KEY_F(51),
+        f52 = KEY_F(52),
+        f53 = KEY_F(53),
     f54 = KEY_F(54),
     f55 = KEY_F(55),
     f56 = KEY_F(56),
