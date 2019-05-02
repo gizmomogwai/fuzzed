@@ -13,7 +13,6 @@ class Match
     }
 }
 
-
 auto fuzzyMatch(string value, string pattern)
 {
     ulong[] positions;
