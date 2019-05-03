@@ -1,6 +1,5 @@
-import fuzzed;
-
 import deimos.ncurses;
+import fuzzed;
 import std.algorithm;
 import std.array;
 import std.concurrency;
@@ -506,10 +505,6 @@ class Wrapper
 /// the main
 void main(string[] args)
 {
-
-    import core.sys.posix.unistd;
-    import std.stdio;
-
     shared w = cast(shared)(new Wrapper(stdin));
 
     auto model = spawnLinked(&modelLoop);

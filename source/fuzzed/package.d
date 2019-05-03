@@ -1,5 +1,5 @@
 module fuzzed;
 
 public import fuzzed.algorithm;
-public import fuzzed.screen;
 public import fuzzed.model;
+public import fuzzed.screen;

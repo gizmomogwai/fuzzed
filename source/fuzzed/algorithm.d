@@ -1,5 +1,6 @@
 module fuzzed.algorithm;
-import std.typecons;
+
+import std.uni;
 
 class Match
 {
@@ -21,8 +22,6 @@ auto fuzzyMatch(string value, string pattern)
     ulong patternIdx = 0;
     while ((valueIdx < value.length) && (patternIdx < pattern.length))
     {
-        import std.uni;
-
         if (pattern[patternIdx].toLower == value[valueIdx].toLower)
         {
             positions ~= valueIdx;
@@ -62,13 +61,11 @@ version (Have_unit_threaded)
 {
     fuzzyMatch("test", "test").positions.shouldEqual([0, 1, 2, 3]);
 }
-/+
+
 @("check graphemes") unittest
 {
-    import std.uni;
     import std.range.primitives : walkLength;
 
     "ä".byGrapheme.walkLength.shouldEqual(1);
     "noe\u0308l".byGrapheme.walkLength.shouldEqual(5);
 }
-+/

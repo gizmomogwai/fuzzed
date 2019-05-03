@@ -1,15 +1,14 @@
 module fuzzed.screen;
 
 import deimos.ncurses;
+import std.algorithm;
 import std.array;
 import std.conv;
 import std.range;
-
+import std.range;
 import std.stdio;
 import std.string;
 import std.uni;
-import std.algorithm;
-import std.range;
 
 enum Attributes : chtype
 {
