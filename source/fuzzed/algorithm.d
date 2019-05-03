@@ -1,4 +1,5 @@
 module fuzzed.algorithm;
+import std.typecons;
 
 class Match
 {
@@ -61,3 +62,13 @@ version (Have_unit_threaded)
 {
     fuzzyMatch("test", "test").positions.shouldEqual([0, 1, 2, 3]);
 }
+/+
+@("check graphemes") unittest
+{
+    import std.uni;
+    import std.range.primitives : walkLength;
+
+    "ä".byGrapheme.walkLength.shouldEqual(1);
+    "noe\u0308l".byGrapheme.walkLength.shouldEqual(5);
+}
++/

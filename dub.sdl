@@ -4,8 +4,6 @@ authors "Christian Koestlin"
 copyright "Copyright (C) 2019, Christian Koestlin"
 license "MIT"
 dependency "ncurses" version="~master" configuration="minimal"
-//dependency "nice-curses" version="~>0.2.5"
-dependency "colored" version="~>0.0.20"
 
 configuration "library" {
   targetType "library"
@@ -19,7 +17,7 @@ configuration "unittest" {
   targetPath "out/test"
 
   excludedSourceFiles "source/app.d"
-  dependency "unit-threaded" version="0.8.0"
+  dependency "unit-threaded" version="0.9.3"
   preBuildCommands "dub run unit-threaded -c gen_ut_main -- -f out/generated/unit-threaded/testsuite.d"
   mainSourceFile "out/generated/unit-threaded/testsuite.d"
 }

@@ -1,6 +1,5 @@
 import fuzzed;
 
-import colored;
 import deimos.ncurses;
 import std.algorithm;
 import std.array;
@@ -12,11 +11,11 @@ import std.stdio;
 import std.string;
 import std.uni;
 
-/// Produce ncurses attributes array for a stringish thing with highlights and selection style
-auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset = 0)
+/// Produce a range of graphemes and attributes for those
+auto attributes(string s, immutable ulong[] highlights, bool selected, int offset = 0)
 {
-    Attributes[] result = s.byGrapheme.map!(_ => selected ? Attributes.bold
-            : Attributes.normal).array;
+    auto graphemes = s.byGrapheme;
+    auto result = graphemes.map!(_ => selected ? Attributes.bold : Attributes.normal).array;
     foreach (index; highlights)
     {
         if (index + offset < result.length)
@@ -24,7 +23,7 @@ auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset 
             result[index + offset] |= Attributes.standout;
         }
     }
-    return result;
+    return zip(graphemes, result);
 }
 
 class Details
@@ -34,17 +33,18 @@ class Details
     ulong offset;
     ulong selection;
 }
+
 /// The working horse
-class UiList(S)
+class UiList
 {
-    S screen;
+    Screen screen;
     int height;
     Details details;
 
     Tid model;
     immutable(Match)[] allMatches;
 
-    this(S screen, Tid model)
+    this(Screen screen, Tid model)
     {
         this.screen = screen;
         this.details = new Details;
@@ -116,43 +116,40 @@ class UiList(S)
         model.send(Matches.Request(thisTid, height, details.offset));
         //dfmt off
         receive(
-          (Matches response)
-          {
-              allMatches = response.matches;
-              details.total = response.total;
-              details.matches = allMatches.length;
-          },
+            (Matches response)
+            {
+                allMatches = response.matches;
+                details.total = response.total;
+                details.matches = allMatches.length;
+            },
         );
         //dfmt on
         adjustOffsetAndSelection;
-        // dfmt off
+        //dfmt off
         auto matches = allMatches[
           min(allMatches.length, details.offset) .. min(allMatches.length, details.offset + height)];
-        // dfmt on
+        //dfmt on
         foreach (index, match; matches)
         {
             auto y = height - index.to!int - 1;
-            bool selected = index == details.selection - details.offset;
-            auto text = (selected ? "> %s" : "  %s").format(match.value)
+            auto selected = index == details.selection - details.offset;
+            //dfmt off
+            auto text = (selected ? "> %s" : "  %s")
+                .format(match.value)
                 .take(screen.width).to!string;
-            screen.addstr(y, 0, text, text.attributes(match.positions, selected, 2));
+            //dfmt on
+            screen.addstring(y, 0, text.attributes(match.positions, selected, 2));
         }
     }
 }
 
-/// factory for List(S)
-auto uiList(S)(S screen, Tid model)
+/// Status
+class UiStatus
 {
-    return new UiList!(S)(screen, model);
-}
-
-/// Statusline
-class UiStatus(S)
-{
-    S screen;
+    Screen screen;
     Tid model;
     Details details;
-    this(S screen, Tid model, Details details)
+    this(Screen screen, Tid model, Details details)
     {
         this.screen = screen;
         this.model = model;
@@ -170,10 +167,10 @@ class UiStatus(S)
         StatusInfo statusInfo;
         // dfmt off
         receive(
-          (StatusInfo response)
-          {
-              statusInfo = response;
-          },
+            (StatusInfo response)
+            {
+                statusInfo = response;
+            },
         );
         // dfmt on
 
@@ -183,10 +180,10 @@ class UiStatus(S)
 
         auto trimmedCounter = "%s/%s (selection %s/offset %s)".format(details.matches,
                 details.total, details.selection, details.offset).take(screen.width - 2).to!string;
-        screen.addstr(screen.height - 2, 2, trimmedCounter);
+        screen.addstring(screen.height - 2, 2, trimmedCounter);
 
         auto trimmedPattern = "> %s".format(pattern).take(screen.width - 2).to!string;
-        screen.addstr(screen.height - 1, 0, trimmedPattern, trimmedPattern.attributes([], true));
+        screen.addstring(screen.height - 1, 0, trimmedPattern.attributes([], true));
         return this;
     }
 
@@ -201,23 +198,17 @@ class UiStatus(S)
     }
 }
 
-/// factory for Status(S)
-auto uiStatus(S)(S screen, Tid model, Details details)
-{
-    return new UiStatus!(S)(screen, model, details);
-}
-
 /// The ui made out of List and Status
-class Ui(S)
+class Ui
 {
-    S screen;
-    UiList!(S) list;
-    UiStatus!(S) status;
-    this(S screen, Tid model)
+    Screen screen;
+    UiList list;
+    UiStatus status;
+    this(Screen screen, Tid model)
     {
         this.screen = screen;
-        this.list = uiList(screen, model);
-        this.status = uiStatus(screen, model, this.list.details);
+        this.list = new UiList(screen, model);
+        this.status = new UiStatus(screen, model, this.list.details);
     }
 
     auto get()
@@ -268,12 +259,6 @@ class Ui(S)
         status.selectDown;
         return render;
     }
-}
-
-/// factory for UI(S)
-auto ui(S)(S screen, Tid model)
-{
-    return new Ui!(S)(screen, model);
 }
 
 /// State of the search
@@ -447,7 +432,7 @@ enum Key : int
 }
 
 /// handle input events
-State handleKey(S, T)(S input, T ui, Tid model, State state)
+State handleKey(WideCharacter input, Ui ui, Tid model, State state)
 {
     if (input.specialKey)
     {
@@ -518,25 +503,6 @@ class Wrapper
     }
 }
 
-/* Prepare a wide character for drawing. */
-
-/+
- void testmain(string[] args) {
- initialize curses on fresh tty
- auto tty = File("/dev/tty", "r+");
- auto screen = newterm(null, tty.getFP, tty.getFP);
- screen.set_term;
- scope (exit) {
- endwin;
- screen.delscreen;
- "over and out".writeln;
- }
- immutable hello = toStringz("Hello ncurses World!\nPress any key to continue...");
- printw(hello); // prints the char[] hello to the screen
- refresh();     // actually does the writing to the physical screen
- getch();
- }
- +/
 /// the main
 void main(string[] args)
 {
@@ -558,13 +524,13 @@ void main(string[] args)
     // dfmt on
     Screen screen = new Screen("/dev/tty");
 
-    auto ui = ui(screen, model);
+    auto ui = new Ui(screen, model);
     ui.render;
     while (!state.finished)
     {
         try
         {
-            auto input = screen.getwch;
+            auto input = screen.getWideCharacter;
             state = handleKey(input, ui, model, state);
             ui.render;
         }

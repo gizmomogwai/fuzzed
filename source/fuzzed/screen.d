@@ -35,30 +35,9 @@ enum Attributes : chtype
 
 void activate(Attributes attributes)
 {
-    if (attributes & Attributes.bold)
-    {
-        attron(A_BOLD);
-    }
-    else
-    {
-        attroff(A_BOLD);
-    }
-    if (attributes & Attributes.reverse)
-    {
-        attron(A_REVERSE);
-    }
-    else
-    {
-        attroff(A_REVERSE);
-    }
-    if (attributes & Attributes.standout)
-    {
-        attron(A_STANDOUT);
-    }
-    else
-    {
-        attroff(A_STANDOUT);
-    }
+    (attributes & Attributes.bold) ? attron(A_BOLD) : attroff(A_BOLD);
+    (attributes & Attributes.reverse) ? attron(A_REVERSE) : attroff(A_REVERSE);
+    (attributes & Attributes.standout) ? attron(A_STANDOUT) : attroff(A_STANDOUT);
 }
 
 struct WideCharacter
@@ -127,25 +106,26 @@ class Screen
         return deimos.ncurses.curses.getmaxy(this.window) + 1;
     }
 
-    auto addstr(int y, int x, string text)
+    auto addstring(int y, int x, string text)
     {
         deimos.ncurses.curses.move(y, x);
         deimos.ncurses.curses.addstr(text.toStringz);
         return this;
     }
 
-    void addstr(Range)(int y, int x, string str, Range attributes)
+    auto addstring(Range)(int y, int x, Range str)
     {
         deimos.ncurses.curses.move(y, x);
-        addstr(str, attributes);
+        addstring(str);
+        return this;
     }
 
-    void addstr(string str, Attributes[] attributes)
+    void addstring(Range)(Range str)
     {
-        foreach (c, attr; zip(str.byGrapheme.array, attributes))
+        foreach (grapheme, attribute; str)
         {
-            attr.activate;
-            deimos.ncurses.curses.addstr(text(c[].array).toStringz);
+            attribute.activate;
+            deimos.ncurses.curses.addstr(text(grapheme[].array).toStringz);
         }
     }
 
@@ -159,7 +139,7 @@ class Screen
         return deimos.ncurses.curses.getcury(this.window);
     }
 
-    auto getwch()
+    auto getWideCharacter()
     {
         wint_t key;
         int res = wget_wch(this.window, &key);
