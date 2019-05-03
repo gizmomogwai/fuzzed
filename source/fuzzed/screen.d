@@ -35,9 +35,12 @@ enum Attributes : chtype
 
 void activate(Attributes attributes)
 {
-    (attributes & Attributes.bold) ? attron(A_BOLD) : attroff(A_BOLD);
-    (attributes & Attributes.reverse) ? attron(A_REVERSE) : attroff(A_REVERSE);
-    (attributes & Attributes.standout) ? attron(A_STANDOUT) : attroff(A_STANDOUT);
+    (attributes & Attributes.bold) ? deimos.ncurses.curses.attron(A_BOLD)
+        : deimos.ncurses.curses.attroff(A_BOLD);
+    (attributes & Attributes.reverse) ? deimos.ncurses.curses.attron(A_REVERSE)
+        : deimos.ncurses.curses.attroff(A_REVERSE);
+    (attributes & Attributes.standout) ? deimos.ncurses.curses.attron(A_STANDOUT)
+        : deimos.ncurses.curses.attroff(A_STANDOUT);
 }
 
 struct WideCharacter
@@ -48,6 +51,14 @@ struct WideCharacter
     {
         this.character = character;
         this.specialKey = specialKey;
+    }
+}
+
+class NoKeyException : Exception
+{
+    this(string s)
+    {
+        super(s);
     }
 }
 
@@ -126,6 +137,7 @@ class Screen
         {
             attribute.activate;
             deimos.ncurses.curses.addstr(text(grapheme[].array).toStringz);
+            deimos.ncurses.curses.attrset(A_NORMAL);
         }
     }
 
@@ -150,7 +162,7 @@ class Screen
         case OK:
             return WideCharacter(key, false);
         default:
-            throw new Exception("Failed to get a wide character");
+            throw new NoKeyException("Could not read a wide character");
         }
     }
 }

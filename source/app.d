@@ -522,23 +522,26 @@ void main(string[] args)
             result : "",
         };
     // dfmt on
-    Screen screen = new Screen("/dev/tty");
-
-    auto ui = new Ui(screen, model);
-    ui.render;
-    while (!state.finished)
     {
-        try
+        Screen screen = new Screen("/dev/tty");
+        scope (exit)
         {
-            auto input = screen.getWideCharacter;
-            state = handleKey(input, ui, model, state);
-            ui.render;
+            screen.destroy;
         }
-        catch (Exception e)
+        auto ui = new Ui(screen, model);
+        while (!state.finished)
         {
+            try
+            {
+                ui.render;
+                auto input = screen.getWideCharacter;
+                state = handleKey(input, ui, model, state);
+            }
+            catch (NoKeyException e)
+            {
+            }
         }
     }
-    screen.destroy;
     stdin.close;
 
     if (state.result)
