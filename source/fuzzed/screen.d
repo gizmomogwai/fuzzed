@@ -1,49 +1,17 @@
 module fuzzed.screen;
 
 import deimos.ncurses;
+import std.array;
+import std.conv;
+import std.range;
 
 import std.stdio;
 import std.string;
+import std.uni;
+import std.algorithm;
+import std.range;
 
-struct CChar
-{
-    wint_t[] chars;
-    chtype attr;
-
-    this(wint_t chr, chtype attr = Attr.normal)
-    {
-        chars = [chr];
-        this.attr = attr;
-    }
-
-    this(const wint_t[] chars, chtype attr = Attr.normal)
-    {
-        this.chars = chars.dup;
-        this.attr = attr;
-    }
-
-    this(const string chars, chtype attr = Attr.normal)
-    {
-        import std.conv;
-
-        this.chars = chars.to!(wint_t[]);
-        this.attr = attr;
-    }
-
-    bool opBinary(op)(wint_t chr) if (op == "==")
-    {
-        return chars[0] == chr;
-    }
-
-    alias cchar this;
-
-    cchar_t cchar() const @property
-    {
-        return prepChar(chars, attr);
-    }
-}
-
-enum Attr : chtype
+enum Attributes : chtype
 {
     normal = A_NORMAL,
     charText = A_CHARTEXT,
@@ -65,6 +33,34 @@ enum Attr : chtype
     vertical = A_VERTICAL,
 }
 
+void activate(Attributes attributes)
+{
+    if (attributes & Attributes.bold)
+    {
+        attron(A_BOLD);
+    }
+    else
+    {
+        attroff(A_BOLD);
+    }
+    if (attributes & Attributes.reverse)
+    {
+        attron(A_REVERSE);
+    }
+    else
+    {
+        attroff(A_REVERSE);
+    }
+    if (attributes & Attributes.standout)
+    {
+        attron(A_STANDOUT);
+    }
+    else
+    {
+        attroff(A_STANDOUT);
+    }
+}
+
 struct WideCharacter
 {
     wint_t character;
@@ -74,40 +70,6 @@ struct WideCharacter
         this.character = character;
         this.specialKey = specialKey;
     }
-}
-
-cchar_t prepChar(C : wint_t, A : chtype)(C ch, A attr)
-{
-    import core.stdc.stddef : wchar_t;
-
-    cchar_t res;
-    wchar_t[] str = [ch, 0];
-    setcchar(&res, str.ptr, attr, PAIR_NUMBER(attr), null);
-    return res;
-}
-
-cchar_t prepChar(C : wint_t, A : chtype)(const C[] chars, A attr)
-{
-    import core.stdc.stddef : wchar_t;
-    import std.array;
-    import std.range;
-
-    cchar_t res;
-    version (Win32)
-    {
-        import std.conv : wtext;
-
-        const wchar_t[] str = (chars.take(CCHARW_MAX).wtext) ~ 0;
-    }
-    else
-    {
-        const wchar_t[] str = (chars.take(CCHARW_MAX).array) ~ 0;
-    }
-    /* Hmm, 'const' modifiers apparently were lost during porting the library
-       from C to D.
-    */
-    setcchar(&res, cast(wchar_t*) str.ptr, attr, PAIR_NUMBER(attr), null);
-    return res;
 }
 
 class Screen
@@ -172,19 +134,19 @@ class Screen
         return this;
     }
 
-    void addch(C : wint_t, A : chtype)(C ch, A attr = Attr.normal)
-    {
-        bool isLowerRight = (curY == height - 1) && (curX == width - 1);
-        auto toDraw = prepChar(ch, attr);
-        if (deimos.ncurses.curses.wadd_wch(ptr, &toDraw) != OK && !isLowerRight)
-            throw new Exception("Failed to add character '%s'", ch);
-    }
-
-    /* Coords, n, multiple attrs */
-    void addstr(String, Range)(int y, int x, String str, Range attrs)
+    void addstr(Range)(int y, int x, string str, Range attributes)
     {
         deimos.ncurses.curses.move(y, x);
-        addnstr(str, attrs);
+        addstr(str, attributes);
+    }
+
+    void addstr(string str, Attributes[] attributes)
+    {
+        foreach (c, attr; zip(str.byGrapheme.array, attributes))
+        {
+            attr.activate;
+            deimos.ncurses.curses.addstr(text(c[].array).toStringz);
+        }
     }
 
     int currentX() @property
@@ -195,32 +157,6 @@ class Screen
     int currentY() @property
     {
         return deimos.ncurses.curses.getcury(this.window);
-    }
-
-    void addch(cchar_t ch)
-    {
-        bool isLowerRight = (currentY == height - 1) && (currentX == width - 1);
-        if (deimos.ncurses.curses.wadd_wch(this.window, &ch) != OK && !isLowerRight)
-            throw new Exception("Failed to add complex character '%s'".format(ch));
-
-    }
-
-    void addnstr(String, Range)(String str, Range attrs)
-    {
-        import std.array;
-        import std.conv;
-        import std.range;
-        import std.uni;
-
-        foreach (gr; str.byGrapheme)
-        {
-            if (attrs.empty)
-                break;
-
-            auto attr = attrs.front;
-            attrs.popFront;
-            addch(CChar(text(gr[].array), attr));
-        } /* foreach grapheme */
     }
 
     auto getwch()

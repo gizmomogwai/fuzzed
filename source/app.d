@@ -10,16 +10,18 @@ import std.format;
 import std.range;
 import std.stdio;
 import std.string;
+import std.uni;
 
 /// Produce ncurses attributes array for a stringish thing with highlights and selection style
 auto attributes(T)(T s, immutable ulong[] highlights, bool selected, int offset = 0)
 {
-    Attr[] result = s.map!(_ => selected ? Attr.bold : Attr.normal).array;
+    Attributes[] result = s.byGrapheme.map!(_ => selected ? Attributes.bold
+            : Attributes.normal).array;
     foreach (index; highlights)
     {
         if (index + offset < result.length)
         {
-            result[index + offset] |= Attr.standout;
+            result[index + offset] |= Attributes.standout;
         }
     }
     return result;
