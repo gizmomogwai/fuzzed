@@ -42,14 +42,22 @@ void activate(Attributes attributes)
         : deimos.ncurses.curses.attroff(A_STANDOUT);
 }
 
-struct WideCharacter
-{
-    wint_t character;
+/// either a special key like arrow or backspace
+/// or an utf-8 string (e.g. ä is already 2 bytes in an utf-8 string)
+struct KeyInput {
     bool specialKey;
-    this(wint_t character, bool specialKey)
-    {
-        this.character = character;
+    wint_t key;
+    string input;
+    this(bool specialKey, wint_t key, string input) {
         this.specialKey = specialKey;
+        this.key = key;
+        this.input=input.dup;
+    }
+    static KeyInput fromSpecialKey(wint_t key) {
+        return KeyInput(true, key, "");
+    }
+    static KeyInput fromText(string s) {
+        return KeyInput(false, 0, s);
     }
 }
 
@@ -135,7 +143,7 @@ class Screen
         foreach (grapheme, attribute; str)
         {
             attribute.activate;
-            deimos.ncurses.curses.addstr(text(grapheme[].array).toStringz);
+            deimos.ncurses.curses.addstr(text(grapheme[]).toStringz);
             deimos.ncurses.curses.attrset(A_NORMAL);
         }
     }
@@ -152,16 +160,38 @@ class Screen
 
     auto getWideCharacter()
     {
-        wint_t key;
-        int res = wget_wch(this.window, &key);
+        wint_t key1;
+        int res = wget_wch(this.window, &key1);
         switch (res)
         {
         case KEY_CODE_YES:
-            return WideCharacter(key, true);
+            return KeyInput.fromSpecialKey(key1);
         case OK:
-            return WideCharacter(key, false);
+            return KeyInput.fromText(key1.to!string);
         default:
             throw new NoKeyException("Could not read a wide character");
         }
     }
+}
+
+int byteCount(int k) {
+    if (k < 0b1100_0000) {
+        return 1;
+    }
+    if (k < 0b1110_0000) {
+        return 2;
+    }
+
+    if (k > 0b1111_0000) {
+        return 3;
+    }
+
+    return 4;
+}
+
+@("test strings") unittest {
+    string s = ['d'];
+    writeln(KeyInput.fromText(s));
+    import std.stdio;
+    writeln(s.length);
 }

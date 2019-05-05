@@ -431,11 +431,11 @@ enum Key : int
 }
 
 /// handle input events
-State handleKey(WideCharacter input, Ui ui, Tid model, State state)
+State handleKey(KeyInput input, Ui ui, Tid model, State state)
 {
     if (input.specialKey)
     {
-        switch (input.character)
+        switch (input.key)
         {
         case Key.up:
             ui.selectUp;
@@ -452,21 +452,26 @@ State handleKey(WideCharacter input, Ui ui, Tid model, State state)
     }
     else
     {
-        switch (input.character)
+        switch (input.input)
         {
-        case 10:
+        case [10]:
             state.finished = true;
             state.result = ui.get;
             break;
-        case 127:
+        case [127]:
             if (state.pattern.length > 0)
             {
-                state.pattern = state.pattern[0 .. $ - 1];
+                auto g = state.pattern.byGrapheme.array;
+                string newPattern;
+                for (int i=0; i<g.length-1; ++i) {
+                    newPattern ~= g[i][].text;
+                }
+                state.pattern = newPattern;
                 model.send(Pattern(state.pattern.idup));
             }
             break;
         default:
-            state.pattern ~= input.character;
+            state.pattern = state.pattern ~ input.input;
             model.send(Pattern(state.pattern.idup));
             break;
         }
@@ -507,6 +512,8 @@ void main(string[] args)
 {
     shared w = cast(shared)(new Wrapper(stdin));
 
+    import core.stdc.locale;
+    setlocale(LC_ALL, "");
     auto model = spawnLinked(&modelLoop);
     auto reader = spawnLinked(&readerLoop, w, model);
     // dfmt off
@@ -516,6 +523,7 @@ void main(string[] args)
             pattern : "",
             result : "",
         };
+    KeyInput keyInput;
     // dfmt on
     {
         Screen screen = new Screen("/dev/tty");
@@ -529,18 +537,18 @@ void main(string[] args)
             try
             {
                 ui.render;
-                auto input = screen.getWideCharacter;
-                state = handleKey(input, ui, model, state);
+                keyInput = screen.getWideCharacter;
+                state = handleKey(keyInput, ui, model, state);
             }
             catch (NoKeyException e)
             {
             }
         }
+        stdin.close;
     }
-    stdin.close;
-
     if (state.result)
     {
         writeln(state.result);
     }
 }
+
