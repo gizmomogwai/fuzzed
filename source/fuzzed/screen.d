@@ -40,23 +40,31 @@ void activate(Attributes attributes)
         : deimos.ncurses.curses.attroff(A_REVERSE);
     (attributes & Attributes.standout) ? deimos.ncurses.curses.attron(A_STANDOUT)
         : deimos.ncurses.curses.attroff(A_STANDOUT);
+    (attributes & Attributes.underline) ? deimos.ncurses.curses.attron(A_UNDERLINE)
+        : deimos.ncurses.curses.attroff(A_UNDERLINE);
 }
 
 /// either a special key like arrow or backspace
 /// or an utf-8 string (e.g. ä is already 2 bytes in an utf-8 string)
-struct KeyInput {
+struct KeyInput
+{
     bool specialKey;
     wint_t key;
     string input;
-    this(bool specialKey, wint_t key, string input) {
+    this(bool specialKey, wint_t key, string input)
+    {
         this.specialKey = specialKey;
         this.key = key;
-        this.input=input.dup;
+        this.input = input.dup;
     }
-    static KeyInput fromSpecialKey(wint_t key) {
+
+    static KeyInput fromSpecialKey(wint_t key)
+    {
         return KeyInput(true, key, "");
     }
-    static KeyInput fromText(string s) {
+
+    static KeyInput fromText(string s)
+    {
         return KeyInput(false, 0, s);
     }
 }
@@ -174,24 +182,30 @@ class Screen
     }
 }
 
-int byteCount(int k) {
-    if (k < 0b1100_0000) {
+int byteCount(int k)
+{
+    if (k < 0b1100_0000)
+    {
         return 1;
     }
-    if (k < 0b1110_0000) {
+    if (k < 0b1110_0000)
+    {
         return 2;
     }
 
-    if (k > 0b1111_0000) {
+    if (k > 0b1111_0000)
+    {
         return 3;
     }
 
     return 4;
 }
 
-@("test strings") unittest {
+@("test strings") unittest
+{
     string s = ['d'];
     writeln(KeyInput.fromText(s));
     import std.stdio;
+
     writeln(s.length);
 }

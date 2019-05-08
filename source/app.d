@@ -14,12 +14,12 @@ import std.uni;
 auto attributes(string s, immutable ulong[] highlights, bool selected, int offset = 0)
 {
     auto graphemes = s.byGrapheme;
-    auto result = graphemes.map!(_ => selected ? Attributes.bold : Attributes.normal).array;
+    auto result = graphemes.map!(_ => selected ? Attributes.standout : Attributes.normal).array;
     foreach (index; highlights)
     {
         if (index + offset < result.length)
         {
-            result[index + offset] |= Attributes.standout;
+            result[index + offset] |= Attributes.underline;
         }
     }
     return zip(graphemes, result);
@@ -463,7 +463,8 @@ State handleKey(KeyInput input, Ui ui, Tid model, State state)
             {
                 auto g = state.pattern.byGrapheme.array;
                 string newPattern;
-                for (int i=0; i<g.length-1; ++i) {
+                for (int i = 0; i < g.length - 1; ++i)
+                {
                     newPattern ~= g[i][].text;
                 }
                 state.pattern = newPattern;
@@ -513,6 +514,7 @@ void main(string[] args)
     shared w = cast(shared)(new Wrapper(stdin));
 
     import core.stdc.locale;
+
     setlocale(LC_ALL, "");
     auto model = spawnLinked(&modelLoop);
     auto reader = spawnLinked(&readerLoop, w, model);
@@ -551,4 +553,3 @@ void main(string[] args)
         writeln(state.result);
     }
 }
-

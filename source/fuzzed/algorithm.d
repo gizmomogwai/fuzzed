@@ -69,16 +69,20 @@ version (Have_unit_threaded)
     "ä".byGrapheme.walkLength.shouldEqual(1);
     "noe\u0308l".byGrapheme.walkLength.shouldEqual(4);
 }
-@("grapheme") unittest {
+
+@("grapheme") unittest
+{
     import std.uni;
     import std.stdio;
     import std.conv;
     import std.range;
+
     auto text = "noe\u0308l"; // noël using e + combining diaeresis
     assert(text.walkLength == 5); // 5 code points
 
     auto gText = text.byGrapheme;
-    foreach (g; gText) {
+    foreach (g; gText)
+    {
         string s = g[].text;
         writeln(s);
     }
