@@ -2,6 +2,6 @@
 	"fileVersion": 1,
 	"versions": {
 		"ncurses": "~master",
-		"unit-threaded": "0.9.3"
+		"unit-threaded": "2.0.4"
 	}
 }

@@ -5,6 +5,13 @@ copyright "Copyright (C) 2019, Christian Koestlin"
 license "MIT"
 dependency "ncurses" version="~master" configuration="minimal"
 
+configuration "fuzzed" {
+  targetType "executable"
+  targetName "fuzzed"
+  targetPath "out/exe"
+  mainSourceFile "source/app.d"
+}
+
 configuration "library" {
   targetType "library"
   targetPath "out/lib"
@@ -17,14 +24,7 @@ configuration "unittest" {
   targetPath "out/test"
 
   excludedSourceFiles "source/app.d"
-  dependency "unit-threaded" version="0.9.3"
+  dependency "unit-threaded" version="~>2.0.4"
   preBuildCommands "dub run unit-threaded -c gen_ut_main -- -f out/generated/unit-threaded/testsuite.d"
   mainSourceFile "out/generated/unit-threaded/testsuite.d"
-}
-
-configuration "fuzzed" {
-  targetType "executable"
-  targetName "fuzzed"
-  targetPath "out/exe"
-  mainSourceFile "source/app.d"
 }
