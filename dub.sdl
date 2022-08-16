@@ -1,9 +1,11 @@
 name "fuzzed"
 description "A fuzzy finder in dlang."
 authors "Christian Koestlin"
-copyright "Copyright (C) 2019, Christian Koestlin"
+copyright "Copyright (c) 2019, Christian Koestlin"
 license "MIT"
 dependency "ncurses" version="~master" configuration="minimal"
+dependency "tui" version="*"
+dependency "colored" version="*"
 
 configuration "fuzzed" {
   targetType "executable"

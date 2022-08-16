@@ -4,8 +4,11 @@ import std.uni;
 
 class Match
 {
+    /// Complete value of the match
     string value;
+    /// Searchpattern
     string pattern;
+    /// Positions that matched the search pattern
     ulong[] positions;
     this(string value, string pattern, ulong[] positions)
     {
@@ -39,7 +42,6 @@ auto fuzzyMatch(string value, string pattern)
 version (Have_unit_threaded)
 {
     import unit_threaded;
-    import unit_threaded.should;
 }
 
 @("empty pattern") unittest
@@ -49,7 +51,7 @@ version (Have_unit_threaded)
 
 @("normal match") unittest
 {
-    fuzzyMatch("test", "tt").positions.shouldEqual([0, 3]);
+    fuzzyMatch("test", "tt").positions.should == [0, 3];
 }
 
 @("not matching") unittest
@@ -59,7 +61,7 @@ version (Have_unit_threaded)
 
 @("exact match") unittest
 {
-    fuzzyMatch("test", "test").positions.shouldEqual([0, 1, 2, 3]);
+    fuzzyMatch("test", "test").positions.should == [0, 1, 2, 3];
 }
 
 @("check graphemes") unittest
@@ -67,7 +69,7 @@ version (Have_unit_threaded)
     import std.range.primitives : walkLength;
 
     "ä".byGrapheme.walkLength.shouldEqual(1);
-    "noe\u0308l".byGrapheme.walkLength.shouldEqual(4);
+    "noe\u0308l".byGrapheme.walkLength.should == 4;
 }
 
 @("grapheme") unittest
