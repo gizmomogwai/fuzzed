@@ -1,5 +1,5 @@
-import fuzzed : StatusInfo, Match;
-import fuzzed.model : modelLoop, Matches, Pattern;
+import fuzzed.algorithm : Match;
+import fuzzed.model : modelLoop, Matches, Pattern, StatusInfo;
 
 import colored : reverse, underlined, forceStyle;
 import std.algorithm : map, min, canFind;
