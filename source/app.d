@@ -1,7 +1,7 @@
 import fuzzed : StatusInfo, Match;
 import fuzzed.model : modelLoop, Matches, Pattern;
 
-import colored : reverse, underlined;
+import colored : reverse, underlined, forceStyle;
 import std.algorithm : map, min, canFind;
 import std.concurrency : spawnLinked, Tid, send, thisTid, receive, LinkTerminated;
 import std.conv : to;
@@ -34,36 +34,6 @@ auto render(immutable(Match) m)
     }
     return result;
 }
-/// Produce a range of graphemes and attributes for those
-auto attributes(string s, immutable ulong[] highlights, bool selected, int offset = 0)
-{
-    string result = "";
-    auto graphemes = s.byGrapheme;
-    size_t idx = 0;
-    foreach (grapheme; graphemes)
-    {
-        if (selected)
-        {
-            if (highlights.canFind(idx+offset))
-            {
-                result ~= grapheme.to!string.reverse.underlined.to!string;
-            } else
-            {
-                result ~= grapheme.to!string.reverse.to!string;
-            }
-        } else {
-            if (highlights.canFind(idx+offset))
-            {
-                result ~= grapheme.to!string.underlined.to!string;
-            } else
-            {
-                result ~= grapheme.to!string;
-            }
-        }
-        idx++;
-    }
-    return result.to!string;
-}
 
 class StatusInfoUi : Component
 {
@@ -78,10 +48,10 @@ class StatusInfoUi : Component
         StatusInfo statusInfo;
         // dfmt off
         receive(
-            (StatusInfo response)
-            {
-                statusInfo = response;
-            },
+          (StatusInfo response)
+          {
+              statusInfo = response;
+          },
         );
         auto matches = statusInfo.matches;
         auto all = statusInfo.all;
@@ -94,9 +64,8 @@ class StatusInfoUi : Component
         context.putString(0, 1, line);
     }
     override bool focusable() {
-        return true;
+        return false;
     }
-
 }
 
 /// State of the search
@@ -141,46 +110,46 @@ struct InputHandlingDone
 void renderLoop(S)(S state)
 {
     try {
-    Ui ui = null;
-    while (true) {
-        receive(
-          (shared(Ui) newUi)
-          {
-              ui = cast()newUi;
-          },
-          (Tid backChannel, immutable(KeyInput) input)
-          {
-              "log.log".append("got key input 1\n");
-              ui.handleInput(cast()input);
-              "log.log".append("got key input 2\n");
-              backChannel.send(InputHandlingDone());
-              "log.log".append("got key input 3\n");
-          },
-          (Refresh refresh)
-          {
-              "log.log".append("got refresh event\n");
-              ui.render;
-          },
-          (shared void delegate() codeForRenderLoop)
-          {
-              codeForRenderLoop();
-          },
-          (Variant v)
-          {
-              "log.log".append("got variant: ");
-              "log.log".append(v.to!string);
-          },
-        );
-        if (state.finished)
-        {
-            break;
+        Ui ui = null;
+        while (true) {
+            receive(
+              (shared(Ui) newUi)
+              {
+                  ui = cast()newUi;
+              },
+              (Tid backChannel, immutable(KeyInput) input)
+              {
+                  "log.log".append("got key input 1\n");
+                  ui.handleInput(cast()input);
+                  "log.log".append("got key input 2\n");
+                  backChannel.send(InputHandlingDone());
+                  "log.log".append("got key input 3\n");
+              },
+              (Refresh refresh)
+              {
+                  "log.log".append("got refresh event\n");
+                  ui.render;
+              },
+              (shared void delegate() codeForRenderLoop)
+              {
+                  codeForRenderLoop();
+              },
+              (Variant v)
+              {
+                  "log.log".append("got variant: ");
+                  "log.log".append(v.to!string);
+              },
+            );
+            if (state.finished)
+            {
+                break;
+            }
+            if (ui !is null)
+            {
+                ui.render;
+            }
         }
-        if (ui !is null)
-        {
-            ui.render;
-        }
-    }
-    "log.log".append("renderloop finished\n");
+        "log.log".append("renderloop finished\n");
     } catch (Exception e) {
         "log.log".append("\n\n!!!!!!!!!!!\nrenderloop with exception %s\n".format(e.to!string));
     }
@@ -191,7 +160,7 @@ void renderLoop(S)(S state)
 //   - integrates reader loop data into the model
 //   - can return data for the render thread to render
 // renderloop:
-//   - holds application state (via FuzzedUi : Ui)
+//   - holds application state
 //   - sits there and waits for events then renders
 //   - keyinput (from the mainthread) triggers an event
 //   - model changes trigger a refresh event
@@ -203,92 +172,95 @@ void myLoop(State s)
     renderLoop!State(s);
 }
 
+void setLocale()
+{
+    import core.stdc.locale;
+    setlocale(LC_ALL, "");
+}
+
 void main(string[] args)
 {
-    shared w = new Wrapper(stdin);
-    KeyInput keyInput;
+    auto w = new Wrapper(stdin);
     auto state = new State();
     {
-    scope terminal = new Terminal();
+        KeyInput keyInput;
+        scope terminal = new Terminal();
 
-    import core.stdc.locale;
+        setLocale();
 
-    setlocale(LC_ALL, "");
+        auto renderer = spawnLinked(&myLoop, state);
+        auto model = spawnLinked(&modelLoop, renderer);
+        auto reader = spawnLinked(&readerLoop, w, model);
 
-
-    auto renderer = spawnLinked(&myLoop, state);
-    auto model = spawnLinked(&modelLoop, renderer);
-    auto reader = spawnLinked(&readerLoop, w, model);
-
-    auto list = new List!(immutable(Match),
-        match => match.render)(
-          () {
-            model.send(Matches.Request(thisTid));
-            immutable(Match)[] result;
-            receive(
-              (Matches matches)
-              {
-                  result = matches.matches;
-              },
-            );
-            return result;
-        });
-    list.setInputHandler((input) {
-            if (input.input == "\n")
-            {
-                "log.log".append("Return pressed\n");
-                state.result = list.getSelection.value;
-                state.finished = true;
-                return true;
-            }
-            if (input.input == "\x7F")
-            {
-                if (state.pattern.length > 0)
+        auto list = new List!(immutable(Match), match => match.render)
+            (() {
+                model.send(Matches.Request(thisTid));
+                immutable(Match)[] result;
+                receive(
+                  (Matches matches)
+                  {
+                      result = matches.matches;
+                  },
+                );
+                return result;
+            });
+        list.setInputHandler(
+            (input) {
+                if (input.input == "\n")
                 {
-                    state.pattern = state.pattern[0..$-1];
-                    model.send(Pattern(state.pattern));
+                    "log.log".append("Return pressed\n");
+                    state.result = list.getSelection.value;
+                    state.finished = true;
+                    return true;
                 }
+                if (input.input == "\x7F")
+                {
+                    if (state.pattern.length > 0)
+                    {
+                        state.pattern = state.pattern[0..$-1];
+                        model.send(Pattern(state.pattern));
+                    }
+                    return true;
+                }
+                renderer.send(cast(shared)() {
+                        state.pattern ~= input.input;
+                        model.send(Pattern(state.pattern));
+                    });
                 return true;
-            }
-            renderer.send(cast(shared)() {
-                    state.pattern ~= input.input;
-                    model.send(Pattern(state.pattern));
-                });
-            return true;
-    });
+            });
 
-    auto statusInfo = new StatusInfoUi(model);
-    auto root = new HSplit(-2, list, statusInfo);
+        auto statusInfo = new StatusInfoUi(model);
+        auto root = new HSplit(-2, list, statusInfo);
 
-    auto ui= new Ui(terminal);
-    ui.push(root);
-    ui.resize();
-    renderer.send(cast(shared)ui);
-    {
-        while (!state.finished)
+        auto ui= new Ui(terminal);
+        ui.push(root);
+        ui.resize();
+        renderer.send(cast(shared)ui);
         {
-            immutable input = terminal.getInput;
-            "log.log".append("read input: %s\n".format(input));
-            renderer.send(thisTid, input);
-            bool done = false;
-            while (!done) {
-            receive(
-              (InputHandlingDone inputHandlingDone) {
-                  "log.log".append("input handled ... continueing\n");
-                  done = true;
-              },
-              (LinkTerminated linkTerminated)
-              {
-                  // ignore for now (e.g. reader also sends link terminated)
-              },
-              (Variant v) {
-                  "log.log".append("received variant:%s\n".format(v.to!string));
-              },
-            );
+            while (!state.finished)
+            {
+                immutable input = terminal.getInput;
+                "log.log".append("read input: %s\n".format(input));
+                renderer.send(thisTid, input);
+                bool done = false;
+                while (!done) {
+                    receive(
+                      (InputHandlingDone inputHandlingDone) {
+                          "log.log".append("input handled ... continueing\n");
+                          done = true;
+                      },
+                      (LinkTerminated linkTerminated)
+                      {
+                          // ignore for now (e.g. reader also sends link terminated)
+                      },
+                      (Variant v) {
+                          "log.log".append("received variant:%s\n".format(v.to!string));
+                      },
+                    );
+                }
             }
+            stdin.close;
         }
-        stdin.close;
-    }
 
     }
     if (state.result)
