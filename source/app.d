@@ -1,31 +1,34 @@
+import colored : reverse, underlined, forceStyle;
 import fuzzed.algorithm : Match;
 import fuzzed.model : modelLoop, Matches, Pattern, StatusInfo;
-
-import colored : reverse, underlined, forceStyle;
 import std.algorithm : map, min, canFind;
+import std.array : array;
 import std.concurrency : spawnLinked, Tid, send, thisTid, receive, LinkTerminated;
 import std.conv : to;
+import std.file : append; // debug
+import std.format : format;
 import std.format : format;
 import std.range : zip, take;
 import std.stdio : stdin, lines, File, writeln;
 import std.string : strip;
 import std.uni : byGrapheme;
-import tui : Ui, Component, Context, Terminal, KeyInput, List, HSplit, Filled, Button, Refresh;
-import std.format : format;
-import std.file : append; // debug
 import std.variant : Variant;
-import std.array : array;
+import tui : Ui, Component, Context, Terminal, KeyInput, List, HSplit, Filled, Button, Refresh;
 
-auto render(immutable(Match) m)
+/// Underlines the matched parts of the value of a match
+auto renderForList(immutable(Match) m)
 {
-    string result = "";
+    auto result = "";
     auto graphemes = m.value.byGrapheme;
     size_t idx = 0;
     foreach (grapheme; graphemes)
     {
         if (m.positions.canFind(idx++))
         {
-            result ~= grapheme[].array.to!string.underlined.to!string;
+            result ~= grapheme[].array
+                .to!string
+                .underlined
+                .to!string;
         }
         else
         {
@@ -35,6 +38,9 @@ auto render(immutable(Match) m)
     return result;
 }
 
+/++ Two lines status info (matchinfo and current search attern)
+ + Works with an asyn model
+ +/
 class StatusInfoUi : Component
 {
     Tid model;
@@ -42,9 +48,10 @@ class StatusInfoUi : Component
     {
         this.model = model;
     }
+
     override void render(Context context)
     {
-        model.send(StatusInfo.Request(thisTid));
+        model.send(thisTid, StatusInfo.Request());
         StatusInfo statusInfo;
         // dfmt off
         receive(
@@ -68,14 +75,20 @@ class StatusInfoUi : Component
     }
 }
 
-/// State of the search
+/// State of the application
 shared class State
 {
+    /// true if the application is done
     bool finished;
+    /// the resulting selection
     string result;
+    /// the current search pattern
     string pattern;
 }
 
+/++ loop to read in all the dat afrom stdin and send it to the model
+ + supposed to be spawned
+ +/
 void readerLoop(Wrapper input, Tid model)
 {
     try
@@ -87,9 +100,11 @@ void readerLoop(Wrapper input, Tid model)
     }
     catch (Exception e)
     {
+        "log.log".append("readerLoop %s".format(e.to!string));
     }
 }
 
+/// Dirty workaround to get stdin from a to b
 shared class Wrapper
 {
     File o;
@@ -104,9 +119,13 @@ shared class Wrapper
     }
 }
 
+
+/// Signals that the KeyInput processing is done
 struct InputHandlingDone
 {
 }
+
+/// Generic render loop
 void renderLoop(S)(S state)
 {
     try {
@@ -119,15 +138,11 @@ void renderLoop(S)(S state)
               },
               (Tid backChannel, immutable(KeyInput) input)
               {
-                  "log.log".append("got key input 1\n");
                   ui.handleInput(cast()input);
-                  "log.log".append("got key input 2\n");
                   backChannel.send(InputHandlingDone());
-                  "log.log".append("got key input 3\n");
               },
               (Refresh refresh)
               {
-                  "log.log".append("got refresh event\n");
                   ui.render;
               },
               (shared void delegate() codeForRenderLoop)
@@ -151,34 +166,24 @@ void renderLoop(S)(S state)
         }
         "log.log".append("renderloop finished\n");
     } catch (Exception e) {
-        "log.log".append("\n\n!!!!!!!!!!!\nrenderloop with exception %s\n".format(e.to!string));
+        "log.log".append("renderloop with exception %s\n".format(e.to!string));
     }
 }
-// reader loop:
-//   - reads stdin and processes it, then forwards to the modelloop
-// modelloop:
-//   - integrates reader loop data into the model
-//   - can return data for the render thread to render
-// renderloop:
-//   - holds application state
-//   - sits there and waits for events then renders
-//   - keyinput (from the mainthread) triggers an event
-//   - model changes trigger a refresh event
-// mainthread:
-//   - reads keyevents blocking
-/// the main
+
+/// helper for spawning "our" parametrized renderloop
 void myLoop(State s)
 {
     renderLoop!State(s);
 }
 
-void setLocale()
+/// mess around with locale
+private void setLocale()
 {
     import core.stdc.locale;
     setlocale(LC_ALL, "");
 }
 
-void main(string[] args)
+int main(string[] args)
 {
     auto w = new Wrapper(stdin);
     auto state = new State();
@@ -192,9 +197,9 @@ void main(string[] args)
         auto model = spawnLinked(&modelLoop, renderer);
         auto reader = spawnLinked(&readerLoop, w, model);
 
-        auto list = new List!(immutable(Match), match => match.render)
+        auto list = new List!(immutable(Match), match => match.renderForList)
             (() {
-                model.send(Matches.Request(thisTid));
+                model.send(thisTid, Matches.Request());
                 immutable(Match)[] result;
                 receive(
                   (Matches matches)
@@ -206,9 +211,15 @@ void main(string[] args)
             });
         list.setInputHandler(
             (input) {
+                if (input.input == "\x1B")
+                {
+//                    import core.stdc.signal : raise, SIGINT;
+                    state.finished = true;
+                    //                  raise(SIGINT);
+                    return true;
+                }
                 if (input.input == "\n")
                 {
-                    "log.log".append("Return pressed\n");
                     state.result = list.getSelection.value;
                     state.finished = true;
                     return true;
@@ -261,10 +272,11 @@ void main(string[] args)
             }
             stdin.close;
         }
-
     }
     if (state.result)
     {
         state.result.writeln;
+        return 0;
     }
+    return 1;
 }

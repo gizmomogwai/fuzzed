@@ -1,6 +1,15 @@
 module fuzzed.algorithm;
 
-import std.uni;
+import std.uni : toLower;
+
+version (unittest)
+{
+    import std.conv : text;
+    import std.range : walkLength;
+    import std.uni : byGrapheme;
+    import unit_threaded;
+    import std.stdio : writeln;
+}
 
 class Match
 {
@@ -18,6 +27,9 @@ class Match
     }
 }
 
+/++ Fuzzymatches pattern on value.
+ + The characters in pattern need to be in the same order as in value to match.
+ +/
 auto fuzzyMatch(string value, string pattern)
 {
     ulong[] positions;
@@ -37,11 +49,6 @@ auto fuzzyMatch(string value, string pattern)
         return new Match(value, pattern, positions);
     }
     return null;
-}
-
-version (Have_unit_threaded)
-{
-    import unit_threaded;
 }
 
 @("empty pattern") unittest
@@ -74,11 +81,6 @@ version (Have_unit_threaded)
 
 @("grapheme") unittest
 {
-    import std.uni;
-    import std.stdio;
-    import std.conv;
-    import std.range;
-
     auto text = "noe\u0308l"; // noël using e + combining diaeresis
     assert(text.walkLength == 5); // 5 code points
 
