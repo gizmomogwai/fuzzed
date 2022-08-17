@@ -4,10 +4,11 @@ import fuzzed.algorithm : fuzzyMatch, Match;
 import std.algorithm : map, filter;
 import std.array : array;
 import std.concurrency : send, receive, Tid, OwnerTerminated;
-import std.format : format;
-import tui : Refresh;
-import std.file : append;
 import std.conv : to;
+import std.file : append;
+import std.format : format;
+import std.range : iota, zip;
+import tui : Refresh;
 
 version (unittest)
 {
@@ -32,7 +33,7 @@ class Model
     void append(string line)
     {
         all ~= line;
-        auto match = fuzzyMatch(line, pattern);
+        auto match = fuzzyMatch(line, pattern, all.length-1);
         if (match)
         {
             this.matches ~= match;
@@ -50,8 +51,8 @@ class Model
     private void updateMatches()
     {
         // dfmt off
-        this.matches = all
-            .map!(line => fuzzyMatch(line, pattern))
+        this.matches = zip(all, iota(0, all.length))
+            .map!(t => fuzzyMatch(t[0], pattern, t[1]))
             .filter!(match => match !is null)
             .array;
         // dfmt on
@@ -59,10 +60,7 @@ class Model
 
     override string toString()
     {
-        // dfmt off
-        return "Model(all.length=%s, pattern=%s, matches.length=%s)"
-            .format(all.length, pattern, matches.length);
-        // dfmt on
+        return format!"Model(all.length=%s, pattern=%s, matches.length=%s)"(all.length, pattern, matches.length);
     }
 }
 

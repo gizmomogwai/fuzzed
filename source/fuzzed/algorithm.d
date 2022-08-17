@@ -1,6 +1,7 @@
 module fuzzed.algorithm;
 
 import std.uni : toLower;
+import std.format : format;
 
 version (unittest)
 {
@@ -19,18 +20,25 @@ class Match
     string pattern;
     /// Positions that matched the search pattern
     ulong[] positions;
-    this(string value, string pattern, ulong[] positions)
+    /// Index in input dataset
+    size_t index;
+    this(string value, string pattern, ulong[] positions, size_t index)
     {
         this.value = value;
         this.pattern = pattern;
         this.positions = positions;
+        this.index = index;
+    }
+    override string toString()
+    {
+        return format!"Match(value=%s, pattern=%s, positions=%s, index=%s)"(value, pattern, positions, index);
     }
 }
 
 /++ Fuzzymatches pattern on value.
  + The characters in pattern need to be in the same order as in value to match.
  +/
-auto fuzzyMatch(string value, string pattern)
+auto fuzzyMatch(string value, string pattern, size_t index)
 {
     ulong[] positions;
     ulong valueIdx = 0;
@@ -46,7 +54,7 @@ auto fuzzyMatch(string value, string pattern)
     }
     if (patternIdx == pattern.length)
     {
-        return new Match(value, pattern, positions);
+        return new Match(value, pattern, positions, index);
     }
     return null;
 }

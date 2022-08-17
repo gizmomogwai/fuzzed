@@ -9,7 +9,7 @@ dependency "colored" version="*"
 configuration "fuzzed" {
   targetType "executable"
   targetName "fuzzed"
-  targetPath "out/exe"
+  targetPath "out/main"
   mainSourceFile "source/app.d"
   exludedSourceFiles "source/testsuite.d"
 }
