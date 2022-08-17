@@ -3,7 +3,6 @@ description "A fuzzy finder in dlang."
 authors "Christian Koestlin"
 copyright "Copyright (c) 2019, Christian Koestlin"
 license "MIT"
-dependency "ncurses" version="~master" configuration="minimal"
 dependency "tui" version="*"
 dependency "colored" version="*"
 
@@ -27,6 +26,6 @@ configuration "unittest" {
   targetPath "out/test"
 
   excludedSourceFiles "source/app.d"
-  dependency "unit-threaded" version="~>2.0.4"
+  dependency "unit-threaded" version="~>2.1.0"
   mainSourceFile "source/testsuite.d"
 }
