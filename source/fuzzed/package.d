@@ -57,10 +57,10 @@ class StatusInfoUi : Component
         StatusInfo statusInfo;
         // dfmt off
         receive(
-          (StatusInfo response)
-          {
-              statusInfo = response;
-          },
+            (StatusInfo response)
+            {
+                statusInfo = response;
+            },
         );
         auto matches = statusInfo.matches;
         auto all = statusInfo.all;
@@ -129,31 +129,30 @@ void renderLoop(S)(S state)
         Ui ui = null;
         while (true) {
             receive(
-              (shared(Ui) newUi)
-              {
-                  ui = cast()newUi;
-              },
-              (Tid backChannel, immutable(KeyInput) input)
-              {
-                  ui.handleInput(cast()input);
-                  backChannel.send(InputHandlingDone());
-              },
-              (Refresh refresh)
-              {
-                  if (ui !is null)
-                  {
-                      ui.render;
-                  }
-              },
-              (shared void delegate() codeForRenderLoop)
-              {
-                  codeForRenderLoop();
-              },
-              (Variant v)
-              {
-                  "log.log".append("got variant: ");
-                  "log.log".append(v.to!string);
-              },
+                (shared(Ui) newUi)
+                {
+                    ui = cast()newUi;
+                },
+                (Tid backChannel, immutable(KeyInput) input)
+                {
+                    ui.handleInput(cast()input);
+                    backChannel.send(InputHandlingDone());
+                },
+                (Refresh refresh)
+                {
+                    if (ui !is null)
+                    {
+                        ui.render;
+                    }
+                },
+                (shared void delegate() codeForRenderLoop)
+                {
+                    codeForRenderLoop();
+                },
+                (Variant v)
+                {
+                    "log.log".append("renderloop-got variant: %s\n".format(v.to!string));
+                },
             );
             if (state.finished)
             {
@@ -164,7 +163,6 @@ void renderLoop(S)(S state)
                 ui.render;
             }
         }
-        "log.log".append("renderloop finished\n");
     } catch (Exception e) {
         "log.log".append("renderloop with exception %s\n".format(e.to!string));
     }
@@ -186,6 +184,7 @@ private void setLocale()
 auto fuzzed(string[] data=null)
 {
     auto state = new State();
+    bool raiseSigInt = false;
     {
         KeyInput keyInput;
         scope terminal = new Terminal();
@@ -222,9 +221,8 @@ auto fuzzed(string[] data=null)
             (input) {
                 if (input.input == "\x1B")
                 {
-//                    import core.stdc.signal : raise, SIGINT;
+                    raiseSigInt = true;
                     state.finished = true;
-                    //                  raise(SIGINT);
                     return true;
                 }
                 if (input.input == "\n")
@@ -260,13 +258,11 @@ auto fuzzed(string[] data=null)
             while (!state.finished)
             {
                 immutable input = terminal.getInput;
-                "log.log".append("read input: %s\n".format(input));
                 renderer.send(thisTid, input);
                 bool done = false;
                 while (!done) {
                     receive(
                       (InputHandlingDone inputHandlingDone) {
-                          "log.log".append("input handled ... continueing\n");
                           done = true;
                       },
                       (LinkTerminated linkTerminated)
@@ -280,6 +276,11 @@ auto fuzzed(string[] data=null)
                 }
             }
         }
+    }
+    if (raiseSigInt)
+    {
+        import core.stdc.signal : raise, SIGINT;
+        raise(SIGINT);
     }
     return cast()(state.result);
 }
