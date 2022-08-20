@@ -33,7 +33,7 @@ class Model
     void append(string line)
     {
         all ~= line;
-        auto match = fuzzyMatch(line, pattern, all.length-1);
+        auto match = fuzzyMatch(line, pattern, all.length - 1);
         if (match)
         {
             this.matches ~= match;
@@ -60,7 +60,10 @@ class Model
 
     override string toString()
     {
-        return format!"Model(all.length=%s, pattern=%s, matches.length=%s)"(all.length, pattern, matches.length);
+        // dfmt off
+        return format!"Model(all.length=%s, pattern=%s, matches.length=%s)"
+            (all.length, pattern, matches.length);
+        // dfmt on
     }
 }
 
@@ -105,7 +108,6 @@ void modelLoop(Tid listener)
                     },
                     (OwnerTerminated terminated)
                     {
-                        "log.log".append("model-thread: Owner terminated\n");
                         // finish up
                         finished = true;
                     },
@@ -114,56 +116,55 @@ void modelLoop(Tid listener)
                 "log.log".append(e.to!string);
             }
             // dfmt on
+            }
         }
-        "log.log".append("model done\n");
-    }
-    catch (Exception e)
-    {
-        "log.log".append("modelLoop broken: %s".format(e));
-    }
-}
-
-/// New Pattern
-struct Pattern
-{
-    string pattern;
-}
-
-/// Provide StatusInfo
-struct StatusInfo
-{
-    ulong matches;
-    ulong all;
-    string pattern;
-    /// Request for StatusInfo
-    struct Request
-    {
-        string toString()
+        catch (Exception e)
         {
-            return "StatusInfo.Request";
+            "log.log".append("modelLoop broken: %s".format(e));
         }
     }
-}
 
-/// Provide Matches to caller
-struct Matches
-{
-    immutable(Match)[] matches;
-    ulong total;
-    /// Request to get the matches
-    struct Request
+    /// New Pattern
+    struct Pattern
     {
-        ulong offset;
-        ulong height;
-        string toString()
+        string pattern;
+    }
+
+    /// Provide StatusInfo
+    struct StatusInfo
+    {
+        ulong matches;
+        ulong all;
+        string pattern;
+        /// Request for StatusInfo
+        struct Request
         {
-            return "Matches.Request";
+            string toString()
+            {
+                return "StatusInfo.Request";
+            }
         }
     }
-}
 
-@("length of empty array") unittest
-{
-    int[] data;
-    data.length.should == 0;
-}
+    /// Provide Matches to caller
+    struct Matches
+    {
+        immutable(Match)[] matches;
+        ulong total;
+        /// Request to get the matches
+        struct Request
+        {
+            ulong offset;
+            ulong height;
+            string toString()
+            {
+                return "Matches.Request";
+            }
+        }
+    }
+
+    @("length of empty array") unittest
+    {
+        int[] data;
+        data.length.should == 0;
+    }

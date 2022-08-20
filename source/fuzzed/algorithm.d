@@ -29,9 +29,13 @@ class Match
         this.positions = positions;
         this.index = index;
     }
+
     override string toString()
     {
-        return format!"Match(value=%s, pattern=%s, positions=%s, index=%s)"(value, pattern, positions, index);
+        // dfmt on
+        return format!"Match(value=%s, pattern=%s, positions=%s, index=%s)"
+            (value, pattern, positions, index);
+        // dfmt off
     }
 }
 
