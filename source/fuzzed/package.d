@@ -114,11 +114,6 @@ shared class Wrapper
     {
         this.o = cast(shared)o;
     }
-
-    ubyte[] read(ubyte[] buffer)
-    {
-        return (cast() o).rawRead(buffer);
-    }
 }
 
 
@@ -145,7 +140,10 @@ void renderLoop(S)(S state)
               },
               (Refresh refresh)
               {
-                  ui.render;
+                  if (ui !is null)
+                  {
+                      ui.render;
+                  }
               },
               (shared void delegate() codeForRenderLoop)
               {
@@ -185,9 +183,8 @@ private void setLocale()
     setlocale(LC_ALL, "");
 }
 
-auto fuzzed()
+auto fuzzed(string[] data=null)
 {
-    auto w = new Wrapper(stdin);
     auto state = new State();
     {
         KeyInput keyInput;
@@ -197,8 +194,18 @@ auto fuzzed()
 
         auto renderer = spawnLinked(&myLoop, state);
         auto model = spawnLinked(&modelLoop, renderer);
-        auto reader = spawnLinked(&readerLoop, w, model);
-
+        if (data != null)
+        {
+            foreach (s; data)
+            {
+                model.send(s);
+            }
+        }
+        else
+        {
+            auto w = new Wrapper(stdin);
+            auto reader = spawnLinked(&readerLoop, w, model);
+        }
         auto list = new List!(immutable(Match), match => match.renderForList)
             (() {
                 model.send(thisTid, Matches.Request());
@@ -272,7 +279,6 @@ auto fuzzed()
                     );
                 }
             }
-            stdin.close;
         }
     }
     return cast()(state.result);
