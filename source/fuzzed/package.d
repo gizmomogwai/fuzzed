@@ -220,7 +220,7 @@ auto fuzzed(string[] data = null)
                     },
                 );
                 return result;
-            });
+            }, true);
         // dfmt on
         list.setInputHandler((input) {
             if (input.input == "\x1B")
