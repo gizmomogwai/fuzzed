@@ -192,15 +192,8 @@ auto fuzzed(string[] data=null)
         setLocale();
 
         auto renderer = spawnLinked(&myLoop, state);
-        auto model = spawnLinked(&modelLoop, renderer);
-        if (data != null)
-        {
-            foreach (s; data)
-            {
-                model.send(s);
-            }
-        }
-        else
+        auto model = spawnLinked(&modelLoop, data.idup, renderer);
+        if (data is null)
         {
             auto w = new Wrapper(stdin);
             auto reader = spawnLinked(&readerLoop, w, model);

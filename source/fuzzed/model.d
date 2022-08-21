@@ -18,7 +18,7 @@ version (unittest)
 /// Model for the list and the statusbar
 class Model
 {
-    public string[] all;
+    public immutable(string)[] all;
     public string pattern;
     public Match[] matches;
 
@@ -29,6 +29,12 @@ class Model
         update("");
     }
 
+    /// Replace all data
+    auto setData(immutable(string)[] data)
+    {
+        all = data;
+        updateMatches;
+    }
     /// Add one new line to the model
     void append(string line)
     {
@@ -68,11 +74,15 @@ class Model
 }
 
 /// Async API for a model
-void modelLoop(Tid listener)
+void modelLoop(immutable(string)[] data, Tid listener)
 {
     try
     {
         auto model = new Model;
+        if (data !is null)
+        {
+            model.setData(data);
+        }
         bool finished = false;
         while (!finished)
         {

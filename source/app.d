@@ -2,9 +2,10 @@ import fuzzed : fuzzed;
 import std.stdio : writeln;
 
 /// Main entrypoint
-int main()
+int main(string[] args)
 {
-    auto result = fuzzed();
+    auto strippedArgs = args.length > 1 ? args[1..$] : null;
+    auto result = fuzzed(strippedArgs);
     if (result)
     {
         result.value.writeln;
