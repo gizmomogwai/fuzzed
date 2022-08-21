@@ -32,10 +32,10 @@ class Match
 
     override string toString()
     {
-        // dfmt on
-        return format!"Match(value=%s, pattern=%s, positions=%s, index=%s)"
-            (value, pattern, positions, index);
         // dfmt off
+        return format!("Match(value=%s, pattern=%s, positions=%s, index=%s)")
+            (value, pattern, positions, index);
+        // dfmt on
     }
 }
 

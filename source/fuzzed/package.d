@@ -1,6 +1,7 @@
 module fuzzed;
 
 import colored : reverse, underlined, forceStyle;
+import core.stdc.signal : raise, SIGINT;
 import fuzzed.algorithm : Match;
 import fuzzed.model : modelLoop, Matches, Pattern, StatusInfo;
 import std.algorithm : map, min, canFind;
@@ -62,17 +63,20 @@ class StatusInfoUi : Component
                 statusInfo = response;
             },
         );
+        // dfmt on
         auto matches = statusInfo.matches;
         auto all = statusInfo.all;
         auto pattern = statusInfo.pattern;
 
-        auto counter = "%s/%s"/* (selection %s/offset %s)"*/.format(statusInfo.matches, statusInfo.all).to!string;
+        auto counter = format!("%s/%s")(statusInfo.matches, statusInfo.all);
         context.putString(2, 0, counter);
 
-        auto line = "> %s".format(pattern).to!string;
+        auto line = format!("> %s")(pattern);
         context.putString(0, 1, line);
     }
-    override bool focusable() {
+
+    override bool focusable()
+    {
         return false;
     }
 }
@@ -102,7 +106,7 @@ void readerLoop(Wrapper input, Tid model)
     }
     catch (Exception e)
     {
-        "log.log".append("readerLoop %s".format(e.to!string));
+        "log.log".append(format!("readerLoop %s\n")(e.to!string));
     }
 }
 
@@ -112,10 +116,9 @@ shared class Wrapper
     File o;
     this(File o)
     {
-        this.o = cast(shared)o;
+        this.o = cast(shared) o;
     }
 }
-
 
 /// Signals that the KeyInput processing is done
 struct InputHandlingDone
@@ -125,17 +128,20 @@ struct InputHandlingDone
 /// Generic render loop
 void renderLoop(S)(S state)
 {
-    try {
+    try
+    {
         Ui ui = null;
-        while (true) {
+        while (true)
+        {
+            // dfmt off
             receive(
                 (shared(Ui) newUi)
                 {
-                    ui = cast()newUi;
+                    ui = cast() newUi;
                 },
                 (Tid backChannel, immutable(KeyInput) input)
                 {
-                    ui.handleInput(cast()input);
+                    ui.handleInput(cast() input);
                     backChannel.send(InputHandlingDone());
                 },
                 (Refresh refresh)
@@ -154,6 +160,7 @@ void renderLoop(S)(S state)
                     "log.log".append("renderloop-got variant: %s\n".format(v.to!string));
                 },
             );
+            // dfmt on
             if (state.finished)
             {
                 break;
@@ -163,8 +170,10 @@ void renderLoop(S)(S state)
                 ui.render;
             }
         }
-    } catch (Exception e) {
-        "log.log".append("renderloop with exception %s\n".format(e.to!string));
+    }
+    catch (Exception e)
+    {
+        "log.log".append(format!("renderloop with exception %s\n")(e.to!string));
     }
 }
 
@@ -178,10 +187,11 @@ void myLoop(State s)
 private void setLocale()
 {
     import core.stdc.locale;
+
     setlocale(LC_ALL, "");
 }
 
-auto fuzzed(string[] data=null)
+auto fuzzed(string[] data = null)
 {
     auto state = new State();
     bool raiseSigInt = false;
@@ -198,82 +208,87 @@ auto fuzzed(string[] data=null)
             auto w = new Wrapper(stdin);
             auto reader = spawnLinked(&readerLoop, w, model);
         }
+        // dfmt off
         auto list = new List!(immutable(Match), match => match.renderForList)
             (() {
                 model.send(thisTid, Matches.Request());
                 immutable(Match)[] result;
                 receive(
-                  (Matches matches)
-                  {
-                      result = matches.matches;
-                  },
+                    (Matches matches)
+                    {
+                        result = matches.matches;
+                    },
                 );
                 return result;
             });
-        list.setInputHandler(
-            (input) {
-                if (input.input == "\x1B")
-                {
-                    raiseSigInt = true;
-                    state.finished = true;
-                    return true;
-                }
-                if (input.input == "\n")
-                {
-                    state.result = cast(shared(Match))(list.getSelection);
-                    state.finished = true;
-                    return true;
-                }
-                if (input.input == "\x7F")
-                {
-                    if (state.pattern.length > 0)
-                    {
-                        state.pattern = state.pattern[0..$-1];
-                        model.send(Pattern(state.pattern));
-                    }
-                    return true;
-                }
-                renderer.send(cast(shared)() {
-                        state.pattern ~= input.input;
-                        model.send(Pattern(state.pattern));
-                    });
+        // dfmt on
+        list.setInputHandler((input) {
+            if (input.input == "\x1B")
+            {
+                raiseSigInt = true;
+                state.finished = true;
                 return true;
+            }
+            if (input.input == "\n")
+            {
+                state.result = cast(shared(Match))(list.getSelection);
+                state.finished = true;
+                return true;
+            }
+            if (input.input == "\x7F")
+            {
+                if (state.pattern.length > 0)
+                {
+                    state.pattern = state.pattern[0 .. $ - 1];
+                    model.send(Pattern(state.pattern));
+                }
+                return true;
+            }
+            renderer.send(cast(shared)() {
+                state.pattern ~= input.input;
+                model.send(Pattern(state.pattern));
             });
+            return true;
+        });
 
         auto statusInfo = new StatusInfoUi(model);
         auto root = new HSplit(-2, list, statusInfo);
 
-        auto ui= new Ui(terminal);
+        auto ui = new Ui(terminal);
         ui.push(root);
         ui.resize();
-        renderer.send(cast(shared)ui);
+        renderer.send(cast(shared) ui);
         {
             while (!state.finished)
             {
                 immutable input = terminal.getInput;
                 renderer.send(thisTid, input);
                 bool done = false;
-                while (!done) {
+                while (!done)
+                {
+                    // dfmt off
                     receive(
-                      (InputHandlingDone inputHandlingDone) {
-                          done = true;
-                      },
-                      (LinkTerminated linkTerminated)
-                      {
-                          // ignore for now (e.g. reader also sends link terminated)
-                      },
-                      (Variant v) {
-                          "log.log".append("received variant:%s\n".format(v.to!string));
-                      },
+                        (InputHandlingDone inputHandlingDone)
+                        {
+                            done = true;
+                        },
+                        (LinkTerminated linkTerminated)
+                        {
+                            // ignore for now (e.g. reader also sends link terminated)
+                        },
+                        (Variant v)
+                        {
+                            "log.log".append(format!("received variant:%s\n")(v.to!string));
+                        },
                     );
+                    // dfmt on
                 }
             }
         }
     }
     if (raiseSigInt)
     {
-        import core.stdc.signal : raise, SIGINT;
-        raise(SIGINT);
+        SIGINT.raise;
     }
     return cast()(state.result);
 }

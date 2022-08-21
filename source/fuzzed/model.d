@@ -30,11 +30,12 @@ class Model
     }
 
     /// Replace all data
-    auto setData(immutable(string)[] data)
+    void setData(immutable(string)[] data)
     {
         all = data;
         updateMatches;
     }
+
     /// Add one new line to the model
     void append(string line)
     {
@@ -122,59 +123,61 @@ void modelLoop(immutable(string)[] data, Tid listener)
                         finished = true;
                     },
                 );
-            } catch (Exception e) {
+                // dfmt on
+            }
+            catch (Exception e)
+            {
                 "log.log".append(e.to!string);
             }
-            // dfmt on
-            }
         }
-        catch (Exception e)
+    }
+    catch (Exception e)
+    {
+        "log.log".append(format!("modelLoop broken: %s")(e));
+    }
+}
+
+/// New Pattern
+struct Pattern
+{
+    string pattern;
+}
+
+/// Provide StatusInfo
+struct StatusInfo
+{
+    ulong matches;
+    ulong all;
+    string pattern;
+    /// Request for StatusInfo
+    struct Request
+    {
+        string toString()
         {
-            "log.log".append("modelLoop broken: %s".format(e));
+            return "StatusInfo.Request";
         }
     }
+}
 
-    /// New Pattern
-    struct Pattern
+/// Provide Matches to caller
+struct Matches
+{
+    immutable(Match)[] matches;
+    ulong total;
+    /// Request to get the matches
+    struct Request
     {
-        string pattern;
-    }
-
-    /// Provide StatusInfo
-    struct StatusInfo
-    {
-        ulong matches;
-        ulong all;
-        string pattern;
-        /// Request for StatusInfo
-        struct Request
+        ulong offset;
+        ulong height;
+        string toString()
         {
-            string toString()
-            {
-                return "StatusInfo.Request";
-            }
+            return "Matches.Request";
         }
     }
+}
 
-    /// Provide Matches to caller
-    struct Matches
-    {
-        immutable(Match)[] matches;
-        ulong total;
-        /// Request to get the matches
-        struct Request
-        {
-            ulong offset;
-            ulong height;
-            string toString()
-            {
-                return "Matches.Request";
-            }
-        }
-    }
-
-    @("length of empty array") unittest
-    {
-        int[] data;
-        data.length.should == 0;
-    }
+@("length of empty array") unittest
+{
+    int[] data;
+    data.length.should == 0;
+}
