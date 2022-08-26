@@ -28,4 +28,5 @@ configuration "unittest" {
   excludedSourceFiles "source/app.d"
   dependency "unit-threaded" version="~>2.1.0"
   mainSourceFile "source/testsuite.d"
+  postRunCommands "$DUB run lst2errormessages || true"
 }
