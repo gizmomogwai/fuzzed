@@ -30,12 +30,10 @@ class Match
         this.index = index;
     }
 
-    override string toString()
+    override void toString(Sink, Format)(Sink sink, Format format) const
     {
-        // dfmt off
-        return format!("Match(value=%s, pattern=%s, positions=%s, index=%s)")
-            (value, pattern, positions, index);
-        // dfmt on
+        sink(format!("Match(value=%s, pattern=%s, positions=%s, index=%s)")
+             (value, pattern, positions, index));
     }
 }
 
@@ -65,22 +63,22 @@ auto fuzzyMatch(string value, string pattern, size_t index)
 
 @("empty pattern") unittest
 {
-    fuzzyMatch("test", "").shouldNotBeNull;
+    fuzzyMatch("test", "", 0).shouldNotBeNull;
 }
 
 @("normal match") unittest
 {
-    fuzzyMatch("test", "tt").positions.should == [0, 3];
+    fuzzyMatch("test", "tt", 0).positions.should == [0, 3];
 }
 
 @("not matching") unittest
 {
-    fuzzyMatch("test", "test1").shouldBeNull;
+    fuzzyMatch("test", "test1", 0).shouldBeNull;
 }
 
 @("exact match") unittest
 {
-    fuzzyMatch("test", "test").positions.should == [0, 1, 2, 3];
+    fuzzyMatch("test", "test", 0).positions.should == [0, 1, 2, 3];
 }
 
 @("check graphemes") unittest

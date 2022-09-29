@@ -65,12 +65,10 @@ class Model
         // dfmt on
     }
 
-    override string toString()
+    override void toString(Sink, Format)(Sink sink, Format format) const
     {
-        // dfmt off
-        return format!"Model(all.length=%s, pattern=%s, matches.length=%s)"
-            (all.length, pattern, matches.length);
-        // dfmt on
+        sink(format!"Model(all.length=%s, pattern=%s, matches.length=%s)"
+             (all.length, pattern, matches.length));
     }
 }
 
@@ -152,9 +150,9 @@ struct StatusInfo
     /// Request for StatusInfo
     struct Request
     {
-        string toString()
+        void toString(Sink, Format)(Sink sink, Format format) const
         {
-            return "StatusInfo.Request";
+            sink("StatuInfo.Request");
         }
     }
 }
@@ -169,9 +167,9 @@ struct Matches
     {
         ulong offset;
         ulong height;
-        string toString()
+        void toString(Sink, Format)(Sink sink, Format format) const
         {
-            return "Matches.Request";
+            sink("Matches.Request");
         }
     }
 }
