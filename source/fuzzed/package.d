@@ -3,23 +3,21 @@ module fuzzed;
 import colored : reverse, underlined, forceStyle;
 import core.stdc.signal : raise, SIGINT;
 import fuzzed.algorithm : Match;
-import fuzzed.model : modelLoop, Matches, Pattern, StatusInfo;
+import fuzzed.model : Model, Matches, Pattern, StatusInfo;
 import std.algorithm : map, min, canFind;
 import std.array : array;
-import std.concurrency : spawnLinked, Tid, send, thisTid, receive, LinkTerminated;
+import std.concurrency : spawnLinked, Tid, send, thisTid, receive;
 import std.conv : to;
-import std.file : append; // debug
-import std.format : format;
 import std.format : format;
 import std.range : take;
-import std.stdio : stdin, lines, File;
+import std.stdio : stdin, lines, File, writeln;
 import std.string : strip;
 import std.uni : byGrapheme;
 import std.variant : Variant;
 import tui : Ui, Component, Context, Terminal, KeyInput, List, HSplit, Filled, Button, Refresh;
 
 /// Underlines the matched parts of the value of a match
-auto renderForList(immutable(Match) m)
+auto renderForList(Match m)
 {
     auto result = "";
     auto graphemes = m.value.byGrapheme;
@@ -41,34 +39,24 @@ auto renderForList(immutable(Match) m)
     return result;
 }
 
-/++ Two lines status info (matchinfo and current search attern)
- + Works with an asyn model
+/++ Two lines status info (matchinfo and current search pattern)
+ + Works with an async model
  +/
 class StatusInfoUi : Component
 {
-    Tid model;
-    this(Tid model)
+    Model model;
+    this(Model model)
     {
         this.model = model;
     }
 
     override void render(Context context)
     {
-        model.send(thisTid, StatusInfo.Request());
-        StatusInfo statusInfo;
-        // dfmt off
-        receive(
-            (StatusInfo response)
-            {
-                statusInfo = response;
-            },
-        );
-        // dfmt on
-        auto matches = statusInfo.matches;
-        auto all = statusInfo.all;
-        auto pattern = statusInfo.pattern;
+        auto matches = model.matches.length;
+        auto all = model.all.length;
+        auto pattern = model.pattern;
 
-        auto counter = format!("%s/%s")(statusInfo.matches, statusInfo.all);
+        auto counter = format("%s/%s", matches, all);
         context.putString(2, 0, counter);
 
         auto line = format!("> %s")(pattern);
@@ -92,95 +80,21 @@ shared class State
     string pattern;
 }
 
-/++ loop to read in all the dat afrom stdin and send it to the model
+/++ loop to read in all the data from stdin and send it to the model
  + supposed to be spawned
  +/
-void readerLoop(Wrapper input, Tid model)
+void readerLoop(shared(Model) model, shared(Terminal) terminal)
 {
     try
     {
-        foreach (string line; lines(cast()(input.o)))
+        foreach (line; stdin.byLineCopy)
         {
-            model.send(line.strip.idup);
+            (cast()terminal).runInTerminalThread((line){return() => (cast()model).append(line); }(line));
         }
     }
     catch (Exception e)
     {
-        "log.log".append(format!("readerLoop %s\n")(e.to!string));
     }
-}
-
-/// Dirty workaround to get stdin from a to b
-shared class Wrapper
-{
-    File o;
-    this(File o)
-    {
-        this.o = cast(shared) o;
-    }
-}
-
-/// Signals that the KeyInput processing is done
-struct InputHandlingDone
-{
-}
-
-/// Generic render loop
-void renderLoop(S)(S state)
-{
-    try
-    {
-        Ui ui = null;
-        while (true)
-        {
-            // dfmt off
-            receive(
-                (shared(Ui) newUi)
-                {
-                    ui = cast() newUi;
-                },
-                (Tid backChannel, immutable(KeyInput) input)
-                {
-                    ui.handleInput(cast() input);
-                    backChannel.send(InputHandlingDone());
-                },
-                (Refresh refresh)
-                {
-                    if (ui !is null)
-                    {
-                        ui.render;
-                    }
-                },
-                (shared void delegate() codeForRenderLoop)
-                {
-                    codeForRenderLoop();
-                },
-                (Variant v)
-                {
-                    "log.log".append("renderloop-got variant: %s\n".format(v.to!string));
-                },
-            );
-            // dfmt on
-            if (state.finished)
-            {
-                break;
-            }
-            if (ui !is null)
-            {
-                ui.render;
-            }
-        }
-    }
-    catch (Exception e)
-    {
-        "log.log".append(format!("renderloop with exception %s\n")(e.to!string));
-    }
-}
-
-/// helper for spawning "our" parametrized renderloop
-void myLoop(State s)
-{
-    renderLoop!State(s);
 }
 
 /// mess around with locale
@@ -191,104 +105,100 @@ private void setLocale()
     setlocale(LC_ALL, "");
 }
 
+State state = new State();
+
+auto setupFDs()
+{
+    import core.sys.posix.fcntl : O_RDWR, open;
+    import core.sys.posix.unistd : isatty;
+    import std.typecons : tuple;
+
+    int stdinFD = 0;
+    int stdoutFD = 1;
+    if (isatty(0))
+    {
+        writeln("normal mode input");
+    }
+    else
+    {
+        writeln("piped mode input");
+        int tty = open("/dev/tty", O_RDWR);
+        stdinFD = tty;
+    }
+    if (isatty(1))
+    {
+        writeln("normal mode output");
+    }
+    else
+    {
+        writeln("piped mode output");
+    }
+    return tuple!("inFD", "outFD")(stdinFD, stdoutFD);
+}
+
 auto fuzzed(string[] data = null)
 {
-    auto state = new State();
-    bool raiseSigInt = false;
+    KeyInput keyInput;
+    auto fds = setupFDs();
+    scope terminal = new Terminal(fds.inFD, fds.outFD);
+    setLocale();
+    Tid reader;
+    auto model = new Model();
+    if (data is null)
     {
-        KeyInput keyInput;
-        scope terminal = new Terminal();
-
-        setLocale();
-
-        auto renderer = spawnLinked(&myLoop, state);
-        auto model = spawnLinked(&modelLoop, data.idup, renderer);
-        if (data is null)
+        reader = spawnLinked(&readerLoop, cast(shared)model, cast(shared)terminal);
+    }
+    else
+    {
+        model.setData(data);
+    }
+    auto list = new List!(Match, match => match.renderForList)(() => model.matches, true);
+    list.setInputHandler((input) {
+        if (input.input == "\x1B") // escape key
         {
-            auto w = new Wrapper(stdin);
-            auto reader = spawnLinked(&readerLoop, w, model);
-        }
-        // dfmt off
-        auto list = new List!(immutable(Match), match => match.renderForList)
-            (() {
-                model.send(thisTid, Matches.Request());
-                immutable(Match)[] result;
-                receive(
-                    (Matches matches)
-                    {
-                        result = matches.matches;
-                    },
-                );
-                return result;
-            }, true);
-        // dfmt on
-        list.setInputHandler((input) {
-            if (input.input == "\x1B")
-            {
-                raiseSigInt = true;
-                state.finished = true;
-                return true;
-            }
-            if (input.input == "\n")
-            {
-                state.result = cast(shared(Match))(list.getSelection);
-                state.finished = true;
-                return true;
-            }
-            if (input.input == "\x7F")
-            {
-                if (state.pattern.length > 0)
-                {
-                    state.pattern = state.pattern[0 .. $ - 1];
-                    model.send(Pattern(state.pattern));
-                }
-                return true;
-            }
-            renderer.send(cast(shared)() {
-                state.pattern ~= input.input;
-                model.send(Pattern(state.pattern));
-            });
+            state.finished = true;
             return true;
-        });
-
-        auto statusInfo = new StatusInfoUi(model);
-        auto root = new HSplit(-2, list, statusInfo);
-
-        auto ui = new Ui(terminal);
-        ui.push(root);
-        ui.resize();
-        renderer.send(cast(shared) ui);
+        }
+        if (input.input == "\n")
         {
-            while (!state.finished)
+            state.result = cast(shared(Match))(list.getSelection);
+            state.finished = true;
+            return true;
+        }
+        if (input.input == "\x7F")
+        {
+            if (state.pattern.length > 0)
             {
-                immutable input = terminal.getInput;
-                renderer.send(thisTid, input);
-                bool done = false;
-                while (!done)
-                {
-                    // dfmt off
-                    receive(
-                        (InputHandlingDone inputHandlingDone)
-                        {
-                            done = true;
-                        },
-                        (LinkTerminated linkTerminated)
-                        {
-                            // ignore for now (e.g. reader also sends link terminated)
-                        },
-                        (Variant v)
-                        {
-                            "log.log".append(format!("received variant:%s\n")(v.to!string));
-                        },
-                    );
-                    // dfmt on
-                }
+                state.pattern = state.pattern[0 .. $ - 1];
+                model.update(state.pattern);
             }
+            return true;
+        }
+        state.pattern ~= input.input;
+        model.update(state.pattern);
+        return true;
+    });
+
+    auto statusInfo = new StatusInfoUi(model);
+    auto root = new HSplit(-2, list, statusInfo);
+
+    auto ui = new Ui(terminal);
+    ui.push(root);
+
+    ui.resize();
+    while (!state.finished)
+    {
+        ui.render;
+        auto input = terminal.getInput;
+        if (input.ctrlC)
+        {
+            break;
+        }
+        if (!input.empty)
+        {
+            ui.handleInput(cast()input);
         }
     }
-    if (raiseSigInt)
-    {
-        SIGINT.raise;
-    }
-    return cast()(state.result);
+    
+    return state.result;
 }

@@ -1,15 +1,15 @@
 module fuzzed.algorithm;
 
-import std.uni : toLower;
 import std.format : format;
+import std.uni : toLower;
 
 version (unittest)
 {
     import std.conv : text;
     import std.range : walkLength;
+    import std.stdio : writeln;
     import std.uni : byGrapheme;
     import unit_threaded;
-    import std.stdio : writeln;
 }
 
 class Match
@@ -30,10 +30,10 @@ class Match
         this.index = index;
     }
 
-    override void toString(Sink, Format)(Sink sink, Format format) const
+    void toString(Sink, Format)(Sink sink, Format format) const
     {
-        sink(format!("Match(value=%s, pattern=%s, positions=%s, index=%s)")
-             (value, pattern, positions, index));
+        sink(format!("Match(value=%s, pattern=%s, positions=%s, index=%s)")(value,
+                pattern, positions, index));
     }
 }
 

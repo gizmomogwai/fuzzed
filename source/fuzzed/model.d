@@ -18,7 +18,7 @@ version (unittest)
 /// Model for the list and the statusbar
 class Model
 {
-    public immutable(string)[] all;
+    public string[] all;
     public string pattern;
     public Match[] matches;
 
@@ -30,7 +30,7 @@ class Model
     }
 
     /// Replace all data
-    void setData(immutable(string)[] data)
+    void setData(string[] data)
     {
         all = data;
         updateMatches;
@@ -40,6 +40,7 @@ class Model
     void append(string line)
     {
         all ~= line;
+        import std.file:append;"log.log".append(format("\n\nall: %s", all));
         auto match = fuzzyMatch(line, pattern, all.length - 1);
         if (match)
         {
@@ -65,73 +66,10 @@ class Model
         // dfmt on
     }
 
-    override void toString(Sink, Format)(Sink sink, Format format) const
+    void toString(Sink, Format)(Sink sink, Format format) const
     {
-        sink(format!"Model(all.length=%s, pattern=%s, matches.length=%s)"
-             (all.length, pattern, matches.length));
-    }
-}
-
-/// Async API for a model
-void modelLoop(immutable(string)[] data, Tid listener)
-{
-    try
-    {
-        auto model = new Model;
-        if (data !is null)
-        {
-            model.setData(data);
-        }
-        bool finished = false;
-        while (!finished)
-        {
-            try
-            {
-                //dfmt off
-                receive(
-                    (Pattern pattern)
-                    {
-                        // change of pattern
-                        model.update(pattern.pattern);
-                        listener.send(Refresh());
-                    },
-                    (string line)
-                    {
-                        // new line added
-                        model.append(line);
-                        listener.send(Refresh());
-                    },
-                    (Tid l)
-                    {
-                        listener = l;
-                    },
-                    (Tid backChannel, StatusInfo.Request request)
-                    {
-                        // get status info
-                        backChannel.send(StatusInfo(model.matches.length, model.all.length, model.pattern));
-                    },
-                    (Tid backChannel, Matches.Request request)
-                    {
-                        // get match details
-                        backChannel.send(Matches(cast(immutable(Match)[]) model.matches.dup, model.all.length));
-                    },
-                    (OwnerTerminated terminated)
-                    {
-                        // finish up
-                        finished = true;
-                    },
-                );
-                // dfmt on
-            }
-            catch (Exception e)
-            {
-                "log.log".append(e.to!string);
-            }
-        }
-    }
-    catch (Exception e)
-    {
-        "log.log".append(format!("modelLoop broken: %s")(e));
+        sink(format!"Model(all.length=%s, pattern=%s, matches.length=%s)"(all.length,
+                pattern, matches.length));
     }
 }
 
