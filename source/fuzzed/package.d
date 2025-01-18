@@ -115,23 +115,10 @@ auto setupFDs()
 
     int stdinFD = 0;
     int stdoutFD = 1;
-    if (isatty(0))
+    if (!isatty(0))
     {
-        writeln("normal mode input");
-    }
-    else
-    {
-        writeln("piped mode input");
         int tty = open("/dev/tty", O_RDWR);
         stdinFD = tty;
-    }
-    if (isatty(1))
-    {
-        writeln("normal mode output");
-    }
-    else
-    {
-        writeln("piped mode output");
     }
     return tuple!("inFD", "outFD")(stdinFD, stdoutFD);
 }
