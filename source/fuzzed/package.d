@@ -87,10 +87,20 @@ void readerLoop(shared(Model) model, shared(Terminal) terminal)
 {
     try
     {
+        import std.datetime.stopwatch : msecs, StopWatch, AutoStart;
+        auto chunkDuration = 200.msecs;
+        auto sw = StopWatch(AutoStart.yes);
+        string[] lines;
         foreach (line; stdin.byLineCopy)
         {
-            (cast()terminal).runInTerminalThread((line){return() => (cast()model).append(line); }(line));
+            lines ~= line;
+            if (sw.peek > chunkDuration) {
+                (cast()terminal).runInTerminalThread((lines){return() => (cast()model).append(lines); }(lines));
+                lines = [];
+                sw.reset();
+            }
         }
+        (cast()terminal).runInTerminalThread((lines){return() => (cast()model).append(lines); }(lines));
     }
     catch (Exception e)
     {
@@ -186,6 +196,6 @@ auto fuzzed(string[] data = null)
             ui.handleInput(cast()input);
         }
     }
-    
+
     return state.result;
 }

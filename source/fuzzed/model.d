@@ -40,14 +40,23 @@ class Model
     void append(string line)
     {
         all ~= line;
-        import std.file:append;"log.log".append(format("\n\nall: %s", all));
+        //import std.file:append;"log.log".append(format("\n\nall: %s", all));
         auto match = fuzzyMatch(line, pattern, all.length - 1);
         if (match)
         {
             this.matches ~= match;
         }
     }
-
+    void append(string[] lines) {
+        all ~= lines;
+        foreach (line; lines) {
+        auto match = fuzzyMatch(line, pattern, all.length - 1);
+        if (match)
+        {
+            this.matches ~= match;
+        }
+        }
+    }
     /// Update matches for a new pattern
     void update(string pattern)
     {
