@@ -47,14 +47,17 @@ class Model
             this.matches ~= match;
         }
     }
-    void append(string[] lines) {
+
+    void append(string[] lines)
+    {
         all ~= lines;
-        foreach (line; lines) {
-        auto match = fuzzyMatch(line, pattern, all.length - 1);
-        if (match)
+        foreach (line; lines)
         {
-            this.matches ~= match;
-        }
+            auto match = fuzzyMatch(line, pattern, all.length - 1);
+            if (match)
+            {
+                this.matches ~= match;
+            }
         }
     }
     /// Update matches for a new pattern

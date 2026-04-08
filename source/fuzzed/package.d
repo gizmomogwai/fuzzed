@@ -14,7 +14,8 @@ import std.stdio : stdin, lines, File, writeln;
 import std.string : strip;
 import std.uni : byGrapheme;
 import std.variant : Variant;
-import tui : Ui, Component, Context, Terminal, KeyInput, List, HSplit, Filled, Button, Refresh;
+import tui : Key, EventType, Ui, Component, Context, Terminal, KeyInput, Modifier, Refresh;
+import tui.components : List, HSplit, Filled, Button;
 
 /// Underlines the matched parts of the value of a match
 auto renderForList(Match m)
@@ -88,19 +89,25 @@ void readerLoop(shared(Model) model, shared(Terminal) terminal)
     try
     {
         import std.datetime.stopwatch : msecs, StopWatch, AutoStart;
+
         auto chunkDuration = 200.msecs;
         auto sw = StopWatch(AutoStart.yes);
         string[] lines;
         foreach (line; stdin.byLineCopy)
         {
             lines ~= line;
-            if (sw.peek > chunkDuration) {
-                (cast()terminal).runInTerminalThread((lines){return() => (cast()model).append(lines); }(lines));
+            if (sw.peek > chunkDuration)
+            {
+                (string[] l) {
+                    (cast() terminal).runInTerminalThread(() {
+                        (cast() model).append(l);
+                    });
+                }(lines);
                 lines = [];
                 sw.reset();
             }
         }
-        (cast()terminal).runInTerminalThread((lines){return() => (cast()model).append(lines); }(lines));
+        (cast() terminal).runInTerminalThread(() { (cast() model).append(lines); });
     }
     catch (Exception e)
     {
@@ -143,7 +150,7 @@ auto fuzzed(string[] data = null)
     auto model = new Model();
     if (data is null)
     {
-        reader = spawnLinked(&readerLoop, cast(shared)model, cast(shared)terminal);
+        reader = spawnLinked(&readerLoop, cast(shared) model, cast(shared) terminal);
     }
     else
     {
@@ -151,18 +158,19 @@ auto fuzzed(string[] data = null)
     }
     auto list = new List!(Match, match => match.renderForList)(() => model.matches, true);
     list.setInputHandler((input) {
-        if (input.input == "\x1B") // escape key
+        if (input.key == Key.escape && input.eventType == EventType.press)
         {
             state.finished = true;
             return true;
         }
-        if (input.input == "\n")
+        if (input.key == Key.enter && input.eventType == EventType.press)
         {
             state.result = cast(shared(Match))(list.getSelection);
             state.finished = true;
             return true;
         }
-        if (input.input == "\x7F")
+        if (input.key == Key.backspace && (input.eventType == EventType.press
+            || input.eventType == EventType.repeat))
         {
             if (state.pattern.length > 0)
             {
@@ -171,9 +179,14 @@ auto fuzzed(string[] data = null)
             }
             return true;
         }
-        state.pattern ~= input.input;
-        model.update(state.pattern);
-        return true;
+        if (input.key == Key.normal && (input.eventType == EventType.press
+            || input.eventType == EventType.repeat))
+        {
+            state.pattern ~= input.c;
+            model.update(state.pattern);
+            return true;
+        }
+        return false;
     });
 
     auto statusInfo = new StatusInfoUi(model);
@@ -191,9 +204,14 @@ auto fuzzed(string[] data = null)
         {
             break;
         }
+        if (input.key == Key.normal && input.c == 'c' && (input.modifiers & Modifier.ctrl) != 0)
+        {
+            break;
+        }
+
         if (!input.empty)
         {
-            ui.handleInput(cast()input);
+            ui.handleInput(cast() input);
         }
     }
 
