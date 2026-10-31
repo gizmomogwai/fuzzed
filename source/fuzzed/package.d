@@ -1,15 +1,15 @@
 module fuzzed;
 
-import colored : reverse, underlined, forceStyle;
+import colored : bold, darkGray, green, lightBlue, yellow, reverse, forceStyle;
 import core.stdc.signal : raise, SIGINT;
 import fuzzed.algorithm : Match;
 import fuzzed.model : Model, Matches, Pattern, StatusInfo;
 import std.algorithm : map, min;
-import std.array : appender, array;
+import std.array : appender, array, join;
 import std.concurrency : spawnLinked, Tid, send, thisTid, receive;
-import std.conv : to;
+import std.conv : text, to;
 import std.format : format;
-import std.range : empty, enumerate, front, popFront, take;
+import std.range : empty, enumerate, front, popFront, repeat, take;
 import std.stdio : stdin, lines, File, writeln;
 import std.string : strip;
 import std.uni : byGrapheme;
@@ -17,7 +17,7 @@ import std.variant : Variant;
 import tui : Key, EventType, Ui, Component, Context, Terminal, KeyInput, Modifier, Refresh;
 import tui.components : List, HSplit, Filled, Button;
 
-/// Underlines the matched parts of the value of a match
+/// Highlights the matched parts of the value of a match
 auto renderForList(Match m)
 {
     auto result = appender!string;
@@ -28,7 +28,7 @@ auto renderForList(Match m)
         auto text = grapheme[].array.to!string;
         if (!remaining.empty && remaining.front == position)
         {
-            result ~= text.underlined.to!string;
+            result ~= text.green.to!string;
             remaining.popFront;
         }
         else
@@ -57,10 +57,12 @@ class StatusInfoUi : Component
         auto pattern = model.pattern;
 
         auto counter = format("%s/%s", matches, all);
-        context.putString(2, 0, counter);
+        // separator fills the rest of the line, leaving the last column empty like fzf
+        const separatorLength = width - 3 - cast(int) counter.length - 2;
+        auto separator = separatorLength > 0 ? "─".repeat(separatorLength).join : "";
+        context.putString(0, 0, i"$("──".darkGray) $(counter.yellow) $(separator.darkGray)".text);
 
-        auto line = format!("> %s")(pattern);
-        context.putString(0, 1, line);
+        context.putString(0, 1, "> ".lightBlue.bold ~ pattern.bold.to!string);
     }
 
     override bool focusable()
@@ -222,8 +224,8 @@ version (unittest)
     import unit_threaded;
 }
 
-@("renderForList underlines the matched graphemes") unittest
+@("renderForList highlights the matched graphemes") unittest
 {
     auto match = new Match("xäyz", "äz", [1, 3], 0);
-    match.renderForList.should == "x" ~ "ä".underlined.to!string ~ "y" ~ "z".underlined.to!string;
+    match.renderForList.should == "x" ~ "ä".green.to!string ~ "y" ~ "z".green.to!string;
 }
