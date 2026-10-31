@@ -1,14 +1,15 @@
 module fuzzed.algorithm;
 
-import std.format : format;
-import std.uni : toLower;
+import std.algorithm : all, equal, map;
+import std.ascii : asciiToLower = toLower;
+import std.format : formattedWrite;
+import std.range : empty, enumerate, front, popFront;
+import std.string : representation;
+import std.uni : byGrapheme, toLower;
 
 version (unittest)
 {
-    import std.conv : text;
     import std.range : walkLength;
-    import std.stdio : writeln;
-    import std.uni : byGrapheme;
     import unit_threaded;
 }
 
@@ -30,35 +31,51 @@ class Match
         this.index = index;
     }
 
-    void toString(Sink, Format)(Sink sink, Format format) const
+    void toString(scope void delegate(const(char)[]) sink) const
     {
-        sink(format!("Match(value=%s, pattern=%s, positions=%s, index=%s)")(value,
-                pattern, positions, index));
+        sink.formattedWrite!"Match(value=%s, pattern=%s, positions=%s, index=%s)"(value,
+                pattern, positions, index);
     }
 }
 
-/++ Fuzzymatches pattern on value.
- + The characters in pattern need to be in the same order as in value to match.
+/++ Fuzzy matches pattern on value (case insensitive).
+ + The graphemes of pattern need to appear in the same order in value.
+ + Returns: a Match with the grapheme positions in value, or null.
  +/
-auto fuzzyMatch(string value, string pattern, size_t index)
+Match fuzzyMatch(string value, string pattern, size_t index)
 {
     ulong[] positions;
-    ulong valueIdx = 0;
-    ulong patternIdx = 0;
-    while ((valueIdx < value.length) && (patternIdx < pattern.length))
+    // fast path: for pure ascii every char is one grapheme (except "\r\n")
+    const matched = value.isAscii && pattern.isAscii
+        ? matchPositions!((v, p) => v.asciiToLower == p.asciiToLower)(
+                value.representation, pattern.representation, positions)
+        : matchPositions!((v, p) => v[].map!toLower.equal(p[]))(
+                value.byGrapheme, pattern.toLower.byGrapheme, positions);
+    return matched ? new Match(value, pattern, positions, index) : null;
+}
+
+/// Collects the positions in value where the elements of pattern are found in order.
+private bool matchPositions(alias equals, Value, Pattern)(Value value,
+        Pattern pattern, ref ulong[] positions)
+{
+    foreach (position, element; value.enumerate)
     {
-        if (pattern[patternIdx].toLower == value[valueIdx].toLower)
+        if (pattern.empty)
         {
-            positions ~= valueIdx;
-            patternIdx++;
+            break;
         }
-        valueIdx++;
+        if (equals(element, pattern.front))
+        {
+            positions ~= position;
+            pattern.popFront;
+        }
     }
-    if (patternIdx == pattern.length)
-    {
-        return new Match(value, pattern, positions, index);
-    }
-    return null;
+    return pattern.empty;
+}
+
+private bool isAscii(string s)
+{
+    return s.representation.all!(c => c < 0x80);
 }
 
 @("empty pattern") unittest
@@ -81,23 +98,27 @@ auto fuzzyMatch(string value, string pattern, size_t index)
     fuzzyMatch("test", "test", 0).positions.should == [0, 1, 2, 3];
 }
 
-@("check graphemes") unittest
+@("case insensitive") unittest
 {
-    import std.range.primitives : walkLength;
-
-    "ä".byGrapheme.walkLength.shouldEqual(1);
-    "noe\u0308l".byGrapheme.walkLength.should == 4;
+    fuzzyMatch("TeSt", "tS", 0).positions.should == [0, 2];
+    fuzzyMatch("Äpfel", "äf", 0).positions.should == [0, 2];
 }
 
-@("grapheme") unittest
+@("positions are grapheme indices") unittest
 {
-    auto text = "noe\u0308l"; // noël using e + combining diaeresis
-    assert(text.walkLength == 5); // 5 code points
+    "noël".byGrapheme.walkLength.should == 4;
+    fuzzyMatch("xäy", "y", 0).positions.should == [2];
+    fuzzyMatch("noël", "l", 0).positions.should == [3];
+}
 
-    auto gText = text.byGrapheme;
-    foreach (g; gText)
-    {
-        string s = g[].text;
-        writeln(s);
-    }
+@("combining characters only match as a whole") unittest
+{
+    fuzzyMatch("noël", "e", 0).shouldBeNull;
+    fuzzyMatch("noël", "ë", 0).positions.should == [2];
+}
+
+@("ascii and unicode path agree") unittest
+{
+    fuzzyMatch("TeSt Ä", "tsä", 0).positions.should == [0, 2, 5];
+    fuzzyMatch("TeSt A", "tsa", 0).positions.should == [0, 2, 5];
 }
