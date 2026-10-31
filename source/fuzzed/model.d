@@ -39,27 +39,24 @@ class Model
     /// Add one new line to the model
     void append(string line)
     {
-        all ~= line;
-        //import std.file:append;"log.log".append(format("\n\nall: %s", all));
-        auto match = fuzzyMatch(line, pattern, all.length - 1);
-        if (match)
-        {
-            this.matches ~= match;
-        }
+        append([line]);
     }
 
+    /// Add several new lines to the model
     void append(string[] lines)
     {
+        const firstIndex = all.length;
         all ~= lines;
-        foreach (line; lines)
+        foreach (offset, line; lines)
         {
-            auto match = fuzzyMatch(line, pattern, all.length - 1);
+            auto match = fuzzyMatch(line, pattern, firstIndex + offset);
             if (match)
             {
                 this.matches ~= match;
             }
         }
     }
+
     /// Update matches for a new pattern
     void update(string pattern)
     {
@@ -162,4 +159,15 @@ struct Matches
     model.matches.map!(match => match.index).array.should == [0];
     model.update("b");
     model.matches.map!(match => match.index).array.should == [0, 1, 3];
+}
+
+@("appended lines get their own index") unittest
+{
+    auto model = new Model();
+    model.append("a1");
+    model.append(["a2", "b", "a3"]);
+    model.update("a");
+    model.matches.map!(match => match.index).array.should == [0, 1, 3];
+    model.append(["a4", "a5"]);
+    model.matches.map!(match => match.index).array.should == [0, 1, 3, 4, 5];
 }
