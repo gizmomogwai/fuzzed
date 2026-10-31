@@ -4,12 +4,12 @@ import colored : reverse, underlined, forceStyle;
 import core.stdc.signal : raise, SIGINT;
 import fuzzed.algorithm : Match;
 import fuzzed.model : Model, Matches, Pattern, StatusInfo;
-import std.algorithm : map, min, canFind;
-import std.array : array;
+import std.algorithm : map, min;
+import std.array : appender, array;
 import std.concurrency : spawnLinked, Tid, send, thisTid, receive;
 import std.conv : to;
 import std.format : format;
-import std.range : take;
+import std.range : empty, enumerate, front, popFront, take;
 import std.stdio : stdin, lines, File, writeln;
 import std.string : strip;
 import std.uni : byGrapheme;
@@ -20,24 +20,23 @@ import tui.components : List, HSplit, Filled, Button;
 /// Underlines the matched parts of the value of a match
 auto renderForList(Match m)
 {
-    auto result = "";
-    auto graphemes = m.value.byGrapheme;
-    size_t idx = 0;
-    foreach (grapheme; graphemes)
+    auto result = appender!string;
+    // positions are sorted, so they can be consumed while walking the value
+    auto remaining = m.positions;
+    foreach (position, grapheme; m.value.byGrapheme.enumerate)
     {
-        if (m.positions.canFind(idx++))
+        auto text = grapheme[].array.to!string;
+        if (!remaining.empty && remaining.front == position)
         {
-            result ~= grapheme[].array
-                .to!string
-                .underlined
-                .to!string;
+            result ~= text.underlined.to!string;
+            remaining.popFront;
         }
         else
         {
-            result ~= grapheme[].array.to!string;
+            result ~= text;
         }
     }
-    return result;
+    return result[];
 }
 
 /++ Two lines status info (matchinfo and current search pattern)
@@ -216,4 +215,15 @@ auto fuzzed(string[] data = null)
     }
 
     return state.result;
+}
+
+version (unittest)
+{
+    import unit_threaded;
+}
+
+@("renderForList underlines the matched graphemes") unittest
+{
+    auto match = new Match("xäyz", "äz", [1, 3], 0);
+    match.renderForList.should == "x" ~ "ä".underlined.to!string ~ "y" ~ "z".underlined.to!string;
 }
