@@ -1,7 +1,7 @@
 module fuzzed.model;
 
 import fuzzed.algorithm : fuzzyMatch, Match;
-import std.algorithm : map, filter;
+import std.algorithm : map, filter, startsWith;
 import std.array : array;
 import std.concurrency : send, receive, Tid, OwnerTerminated;
 import std.conv : to;
@@ -63,8 +63,29 @@ class Model
     /// Update matches for a new pattern
     void update(string pattern)
     {
+        // a value matching the longer pattern also matches its prefix,
+        // so only the current matches need to be checked again
+        const refine = pattern.startsWith(this.pattern);
         this.pattern = pattern;
-        updateMatches();
+        if (refine)
+        {
+            refineMatches();
+        }
+        else
+        {
+            updateMatches();
+        }
+    }
+
+    /// Recalc matches from the current matches
+    private void refineMatches()
+    {
+        // dfmt off
+        this.matches = matches
+            .map!(match => fuzzyMatch(match.value, pattern, match.index))
+            .filter!(match => match !is null)
+            .array;
+        // dfmt on
     }
 
     /// Calc all matches
@@ -128,4 +149,17 @@ struct Matches
 {
     int[] data;
     data.length.should == 0;
+}
+
+@("refining the pattern gives the same matches as a full scan") unittest
+{
+    auto model = new Model();
+    model.setData(["abc", "acb", "xyz", "ab"]);
+    model.update("a");
+    model.update("ab");
+    model.matches.map!(match => match.index).array.should == [0, 1, 3];
+    model.update("abc");
+    model.matches.map!(match => match.index).array.should == [0];
+    model.update("b");
+    model.matches.map!(match => match.index).array.should == [0, 1, 3];
 }
