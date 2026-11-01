@@ -60,7 +60,8 @@ class StatusInfoUi : Component
         // separator fills the rest of the line, leaving the last column empty like fzf
         const separatorLength = width - 3 - cast(int) counter.length - 2;
         auto separator = separatorLength > 0 ? "─".repeat(separatorLength).join : "";
-        context.putString(0, 0, i"$("──".darkGray) $(counter.yellow) $(separator.darkGray)".text);
+        context.putString(0, 0, i"$("──".darkGray) $(counter.yellow) $(separator.darkGray)"
+                .text);
 
         context.putString(0, 1, "> ".lightBlue.bold ~ pattern.bold.to!string);
     }
@@ -157,7 +158,8 @@ auto fuzzed(string[] data = null)
     {
         model.setData(data);
     }
-    auto list = new List!(Match, match => match.renderForList)(() => model.matches, true);
+    auto list = new List!(Match, match => match.renderForList)(() => model.matches)
+        .withVerticalFlip.withScrollbar;
     list.setInputHandler((input) {
         if (input.key == Key.escape && input.eventType == EventType.press)
         {

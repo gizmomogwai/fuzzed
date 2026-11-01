@@ -46,11 +46,13 @@ Match fuzzyMatch(string value, string pattern, size_t index)
 {
     ulong[] positions;
     // fast path: for pure ascii every char is one grapheme (except "\r\n")
+    // dfmt off
     const matched = value.isAscii && pattern.isAscii
         ? matchPositions!((v, p) => v.asciiToLower == p.asciiToLower)(
                 value.representation, pattern.representation, positions)
         : matchPositions!((v, p) => v[].map!toLower.equal(p[]))(
                 value.byGrapheme, pattern.toLower.byGrapheme, positions);
+    // dfmt on
     return matched ? new Match(value, pattern, positions, index) : null;
 }
 
