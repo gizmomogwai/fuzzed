@@ -1,6 +1,6 @@
 module fuzzed.algorithm;
 
-import std.algorithm : all, equal, map;
+import std.algorithm : all, equal, find, map;
 import std.ascii : asciiToLower = toLower;
 import std.format : formattedWrite;
 import std.range : empty, enumerate, front, popFront;
@@ -60,19 +60,17 @@ Match fuzzyMatch(string value, string pattern, size_t index)
 private bool matchPositions(alias equals, Value, Pattern)(Value value,
         Pattern pattern, ref ulong[] positions)
 {
-    foreach (position, element; value.enumerate)
-    {
-        if (pattern.empty)
+    auto rest = value.enumerate;
+    return pattern.all!((patternElement) {
+        rest = rest.find!(indexed => equals(indexed.value, patternElement));
+        if (rest.empty)
         {
-            break;
+            return false;
         }
-        if (equals(element, pattern.front))
-        {
-            positions ~= position;
-            pattern.popFront;
-        }
-    }
-    return pattern.empty;
+        positions ~= rest.front.index;
+        rest.popFront;
+        return true;
+    });
 }
 
 private bool isAscii(string s)
