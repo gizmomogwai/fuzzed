@@ -1,2 +1,78 @@
 * Fuzzed
 Commandline fuzzy finder aka "poor mans [[https://github.com/junegunn/fzf][fzf]]" in [[https://dlang.org][dlang]].
+
+** Packages
+
+- =fuzzed=: the search library by default. The =fuzzed= configuration still builds
+  the existing terminal executable, also named =fuzzed=. The =unittest=
+  configuration runs both search and terminal tests. All three configurations
+  belong to the same package.
+- =fuzzed-gui=: a separate DUB package and Jujutsu repository at
+  =/Users/gizmo/Sync/projects/_d/active/fuzzed-gui/=. It depends only on =fuzzed='s
+  library configuration and the local dimgui OpenGL renderer. Build and usage
+  instructions are in =/Users/gizmo/Sync/projects/_d/active/fuzzed-gui/README.md=.
+
+Both frontends use the same case-insensitive subsequence matching and incremental
+model. Matches preserve input order; positions identify complete graphemes.
+Spaces are literal parts of the pattern. The graphical picker no longer uses its
+old gap/boundary scoring or skips whitespace while matching.
+
+** Build and run
+
+From =/Users/gizmo/Sync/projects/_d/active/14-fuzzed/=:
+
+#+begin_src sh
+nix develop --command dub build --config=fuzzed --compiler=ldc2
+nix develop --command dub build --config=library --compiler=ldc2
+nix develop --command dub test --config=unittest --compiler=ldc2
+#+end_src
+
+The Nix shell contains only the compiler, DUB and Git. Graphical dependencies and
+their shell now belong to the separate =fuzzed-gui= repository.
+The existing terminal frontend expects Kitty keyboard protocol support.
+
+** Search library
+
+Applications can depend directly on =fuzzed= with its =library= configuration:
+
+#+begin_src sdl
+dependency "fuzzed" path="../14-fuzzed"
+subConfiguration "fuzzed" "library"
+#+end_src
+
+The default library builds only =fuzzed.algorithm= and =fuzzed.model=, without
+terminal dependencies. These modules live in
+=/Users/gizmo/Sync/projects/_d/active/14-fuzzed/source/fuzzed/= alongside the
+terminal implementation, which is excluded from the library configuration.
+
+#+begin_src d
+import fuzzed.model : Model;
+
+auto model = new Model();
+model.setData(["alpha", "alphabet", "beta"]);
+model.update("ap");
+foreach (match; model.matches)
+{
+    // match.value is unchanged; match.positions contains grapheme indices.
+}
+model.append("application");
+#+end_src
+
+=Model.update= refines existing matches only when the previous pattern remains
+a prefix of complete graphemes; changing a grapheme or removing query text
+searches all lines again. =fuzzyMatch(value, pattern, index)= is also available
+from =fuzzed.algorithm= for individual values.
+
+** Why separate executables?
+
+Keep =fuzzed= for terminal/SSH use and =fuzzed-gui= for desktop use, sharing the
+search library across the two repositories. The GUI adds GLFW/OpenGL, font packaging, a
+window/event lifecycle and platform-specific checks; the TUI retains only its
+terminal dependencies. Neither frontend initializes the other.
+
+A combined binary with =--ui=tui|gui= would provide one command name, but its
+build and distribution would normally include both dependency sets. Runtime
+selection does not remove graphical build dependencies. With the current dynamic
+loaders, terminal mode could defer GUI construction and run without GLFW installed;
+graphical mode would still require GLFW and the font assets. There is no automatic
+display detection or combined dispatcher in this implementation.

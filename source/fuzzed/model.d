@@ -1,14 +1,14 @@
 module fuzzed.model;
 
 import fuzzed.algorithm : fuzzyMatch, Match;
-import std.algorithm : map, filter, startsWith;
+import std.algorithm : map, filter, startsWith, equal;
 import std.array : array;
 import std.concurrency : send, receive, Tid, OwnerTerminated;
 import std.conv : to;
 import std.file : append;
 import std.format : format;
 import std.range : iota, zip;
-import tui : Refresh;
+import std.uni : byGrapheme;
 
 version (unittest)
 {
@@ -60,9 +60,9 @@ class Model
     /// Update matches for a new pattern
     void update(string pattern)
     {
-        // a value matching the longer pattern also matches its prefix,
-        // so only the current matches need to be checked again
-        const refine = pattern.startsWith(this.pattern);
+        // Appending a combining mark can change the final grapheme, not just add one.
+        const refine = pattern.byGrapheme.startsWith!(
+            (left, right) => left[].equal(right[]))(this.pattern.byGrapheme);
         this.pattern = pattern;
         if (refine)
         {
@@ -170,4 +170,15 @@ struct Matches
     model.matches.map!(match => match.index).array.should == [0, 1, 3];
     model.append(["a4", "a5"]);
     model.matches.map!(match => match.index).array.should == [0, 1, 3, 4, 5];
+}
+
+@("extending a grapheme must search all lines again") unittest
+{
+    auto model = new Model();
+    model.setData(["noe\u0308l", "noel"]);
+    model.update("e");
+    model.matches.map!(match => match.index).array.should == [1];
+    model.update("e\u0308");
+    model.matches.map!(match => match.index).array.should == [0];
+    model.matches[0].positions.should == [2];
 }

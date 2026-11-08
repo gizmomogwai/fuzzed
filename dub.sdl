@@ -3,30 +3,32 @@ description "A fuzzy finder in dlang."
 authors "Christian Koestlin"
 copyright "Copyright (c) 2019, Christian Koestlin"
 license "MIT"
-dependency "tui" version="*"
-dependency "colored" version="*"
+sourcePaths "source"
+importPaths "source"
+
+configuration "library" {
+  excludedSourceFiles "source/app.d" "source/testsuite.d" "source/fuzzed/package.d"
+  targetType "library"
+  targetPath "out/lib"
+}
 
 configuration "fuzzed" {
+  dependency "tui" version="*"
+  dependency "colored" version="*"
   targetType "executable"
   targetName "fuzzed"
   targetPath "out/main"
-  mainSourceFile "source/app.d"
-  exludedSourceFiles "source/testsuite.d"
-}
-
-configuration "library" {
-  targetType "library"
-  targetPath "out/lib"
-  excludedSourceFiles "source/app.d" "source/testsuite.d"
+  excludedSourceFiles "source/testsuite.d"
 }
 
 configuration "unittest" {
+  dependency "tui" version="*"
+  dependency "colored" version="*"
   targetType "executable"
   targetName "unittest"
   targetPath "out/test"
 
   excludedSourceFiles "source/app.d"
-  dependency "unit-threaded" version="~>2.2.3"
+  dependency "unit-threaded" version="~>2.2.6"
   mainSourceFile "source/testsuite.d"
-  postRunCommands "$DUB run lst2errormessages || true"
 }
