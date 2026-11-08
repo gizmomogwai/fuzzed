@@ -44,6 +44,10 @@ The default library builds only =fuzzed.algorithm= and =fuzzed.model=, without
 terminal dependencies. These modules live in
 =/Users/gizmo/Sync/projects/_d/active/14-fuzzed/source/fuzzed/= alongside the
 terminal implementation, which is excluded from the library configuration.
+The package depends on =unit-threaded= in every configuration because consuming
+applications also compile the library's =version(unittest)= imports when testing.
+Its test assertions therefore remain available without selecting fuzzed's
+=unittest= configuration in the consuming application.
 
 #+begin_src d
 import fuzzed.model : Model;

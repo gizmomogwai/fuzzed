@@ -5,6 +5,7 @@ copyright "Copyright (c) 2019, Christian Koestlin"
 license "MIT"
 sourcePaths "source"
 importPaths "source"
+dependency "unit-threaded" version="~>2.2.6"
 
 configuration "library" {
   excludedSourceFiles "source/app.d" "source/testsuite.d" "source/fuzzed/package.d"
@@ -29,6 +30,5 @@ configuration "unittest" {
   targetPath "out/test"
 
   excludedSourceFiles "source/app.d"
-  dependency "unit-threaded" version="~>2.2.6"
   mainSourceFile "source/testsuite.d"
 }
