@@ -13,22 +13,44 @@ version (unittest)
     import unit_threaded;
 }
 
+/// An input value
+class Candidate
+{
+    /// Complete value of the input
+    string value;
+    /// Persisted selection count used to rank candidates
+    ulong selectionCount;
+    /// Index in input dataset
+    size_t index;
+
+    this(string value, ulong selectionCount, size_t index)
+    {
+        this.value = value;
+        this.selectionCount = selectionCount;
+        this.index = index;
+    }
+}
+
 class Match
 {
-    /// Complete value of the match
-    string value;
+    Candidate candidate;
+    // Forward candidate fields without duplicating their metadata.
+    alias candidate this;
     /// Searchpattern
     string pattern;
     /// Positions that matched the search pattern
     ulong[] positions;
-    /// Index in input dataset
-    size_t index;
-    this(string value, string pattern, ulong[] positions, size_t index)
+
+    this(Candidate candidate, string pattern, ulong[] positions)
     {
-        this.value = value;
+        this.candidate = candidate;
         this.pattern = pattern;
         this.positions = positions;
-        this.index = index;
+    }
+
+    this(string value, string pattern, ulong[] positions, size_t index)
+    {
+        this(new Candidate(value, 0, index), pattern, positions);
     }
 
     void toString(scope void delegate(const(char)[]) sink) const
@@ -44,6 +66,13 @@ class Match
  +/
 Match fuzzyMatch(string value, string pattern, size_t index)
 {
+    return fuzzyMatch(new Candidate(value, 0, index), pattern);
+}
+
+/// Match a candidate without copying its metadata.
+Match fuzzyMatch(Candidate candidate, string pattern)
+{
+    auto value = candidate.value;
     ulong[] positions;
     // fast path: for pure ascii every char is one grapheme (except "\r\n")
     // dfmt off
@@ -53,7 +82,7 @@ Match fuzzyMatch(string value, string pattern, size_t index)
         : matchPositions!((v, p) => v[].map!toLower.equal(p[]))(
                 value.byGrapheme, pattern.toLower.byGrapheme, positions);
     // dfmt on
-    return matched ? new Match(value, pattern, positions, index) : null;
+    return matched ? new Match(candidate, pattern, positions) : null;
 }
 
 /// Collects the positions in value where the elements of pattern are found in order.

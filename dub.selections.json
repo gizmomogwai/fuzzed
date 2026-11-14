@@ -1,6 +1,7 @@
 {
 	"fileVersion": 1,
 	"versions": {
+		"argparse": "2.0.2",
 		"color": "0.0.9",
 		"colored": "0.0.34",
 		"tui": "0.0.7",

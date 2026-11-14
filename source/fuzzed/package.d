@@ -3,6 +3,7 @@ module fuzzed;
 import colored : bold, darkGray, green, lightBlue, yellow, reverse, forceStyle;
 import core.stdc.signal : raise, SIGINT;
 import fuzzed.algorithm : Match;
+import fuzzed.memory : SelectionMemory;
 import fuzzed.model : Model, Matches, Pattern, StatusInfo;
 import std.algorithm : map, min;
 import std.array : appender, array, join;
@@ -142,14 +143,15 @@ auto setupFDs()
     return tuple!("inFD", "outFD")(stdinFD, stdoutFD);
 }
 
-auto fuzzed(string[] data = null)
+auto fuzzed(string[] data = null, SelectionMemory memory = null)
 {
+    state = new State();
     KeyInput keyInput;
     auto fds = setupFDs();
     scope terminal = new Terminal(fds.inFD, fds.outFD);
     setLocale();
     Tid reader;
-    auto model = new Model();
+    auto model = new Model(memory);
     if (data is null)
     {
         reader = spawnLinked(&readerLoop, cast(shared) model, cast(shared) terminal);
@@ -168,6 +170,10 @@ auto fuzzed(string[] data = null)
         }
         if (input.key == Key.enter && input.eventType == EventType.press)
         {
+            if (list.model.length == 0)
+            {
+                return true;
+            }
             state.result = cast(shared(Match))(list.getSelection);
             state.finished = true;
             return true;

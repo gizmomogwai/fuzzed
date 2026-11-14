@@ -4,6 +4,7 @@ import unit_threaded;
 mixin runTestsMain!(
   "fuzzed",
   "fuzzed.algorithm",
+  "fuzzed.memory",
   "fuzzed.model",
 );
 // dfmt on

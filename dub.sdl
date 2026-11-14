@@ -14,6 +14,7 @@ configuration "library" {
 }
 
 configuration "fuzzed" {
+  dependency "argparse" version="~>2.0.2"
   dependency "tui" version="*"
   dependency "colored" version="*"
   targetType "executable"

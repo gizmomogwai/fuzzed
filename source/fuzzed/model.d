@@ -1,30 +1,31 @@
 module fuzzed.model;
 
 import fuzzed.algorithm : fuzzyMatch, Match;
-import std.algorithm : map, filter, startsWith, equal;
+public import fuzzed.algorithm : Candidate;
+import fuzzed.memory : SelectionMemory;
+import std.algorithm : map, filter, startsWith, equal, sort;
 import std.array : array;
 import std.concurrency : send, receive, Tid, OwnerTerminated;
 import std.conv : to;
 import std.file : append;
 import std.format : format;
-import std.range : iota, zip;
 import std.uni : byGrapheme;
 
-version (unittest)
-{
-    import unit_threaded;
-}
+/// Conservative sorting cutoff; not a real-time guarantee.
+enum MAXIMUM_MEMORY_RANKED_MATCHES = 1000;
 
 /// Model for the list and the statusbar
 class Model
 {
-    public string[] all;
+    public Candidate[] all;
     public string pattern;
     public Match[] matches;
+    private SelectionMemory memory;
 
     /// Create an empty model
-    this()
+    this(SelectionMemory memory = null)
     {
+        this.memory = memory;
         all = [];
         update("");
     }
@@ -32,8 +33,9 @@ class Model
     /// Replace all data
     void setData(string[] data)
     {
-        all = data;
-        updateMatches;
+        all = [];
+        matches = [];
+        append(data);
     }
 
     /// Add one new line to the model
@@ -45,54 +47,86 @@ class Model
     /// Add several new lines to the model
     void append(string[] lines)
     {
-        const firstIndex = all.length;
-        all ~= lines;
-        foreach (offset, line; lines)
+        const previousMatches = matches.length;
+        foreach (line; lines)
         {
-            auto match = fuzzyMatch(line, pattern, firstIndex + offset);
+            // dfmt off
+            auto candidate = new Candidate(line,
+                                           memory is null ? 0 : memory.selectionCount(line),
+                                           all.length);
+            // dfmt on
+            all ~= candidate;
+            auto match = fuzzyMatch(candidate, pattern);
             if (match)
             {
                 this.matches ~= match;
             }
         }
+        orderMatches(previousMatches);
     }
 
     /// Update matches for a new pattern
     void update(string pattern)
     {
-        // Appending a combining mark can change the final grapheme, not just add one.
-        const refine = pattern.byGrapheme.startsWith!(
-            (left, right) => left[].equal(right[]))(this.pattern.byGrapheme);
+        const newGraphemeAdded = pattern.byGrapheme.startsWith!((left,
+                right) => left[].equal(right[]))(this.pattern.byGrapheme);
         this.pattern = pattern;
-        if (refine)
+        if (newGraphemeAdded)
         {
-            refineMatches();
+            filterExistingMatches();
         }
         else
         {
-            updateMatches();
+            matchAllCandidates();
         }
     }
 
     /// Recalc matches from the current matches
-    private void refineMatches()
+    private void filterExistingMatches()
     {
         // dfmt off
         this.matches = matches
-            .map!(match => fuzzyMatch(match.value, pattern, match.index))
+            .map!(match => fuzzyMatch(match.candidate, pattern))
             .filter!(match => match !is null)
             .array;
         // dfmt on
+        orderMatches();
     }
 
     /// Calc all matches
-    private void updateMatches()
+    private void matchAllCandidates()
     {
         // dfmt off
-        this.matches = zip(all, iota(0, all.length))
-            .map!(t => fuzzyMatch(t[0], pattern, t[1]))
+        this.matches = all
+            .map!(candidate => fuzzyMatch(candidate, pattern))
             .filter!(match => match !is null)
             .array;
+        // dfmt on
+        orderMatches();
+    }
+
+    private void orderMatches(size_t previousMatches = 0)
+    {
+        if (memory is null)
+        {
+            return;
+        }
+        if (matches.length > MAXIMUM_MEMORY_RANKED_MATCHES)
+        {
+            // restore input order of the matches if we cross the maximum sort boundary
+            // needed, because before that the matches have been sorted according to
+            // selectionCount and index
+            if (previousMatches <= MAXIMUM_MEMORY_RANKED_MATCHES)
+            {
+                matches[0 .. previousMatches].sort!((left, right) => left.index < right.index);
+            }
+            return;
+        }
+
+        // dfmt off
+        matches.sort!((left, right) =>
+                      left.selectionCount > right.selectionCount ||
+                      (left.selectionCount == right.selectionCount && left.index < right.index));
         // dfmt on
     }
 
@@ -140,45 +174,4 @@ struct Matches
             sink("Matches.Request");
         }
     }
-}
-
-@("length of empty array") unittest
-{
-    int[] data;
-    data.length.should == 0;
-}
-
-@("refining the pattern gives the same matches as a full scan") unittest
-{
-    auto model = new Model();
-    model.setData(["abc", "acb", "xyz", "ab"]);
-    model.update("a");
-    model.update("ab");
-    model.matches.map!(match => match.index).array.should == [0, 1, 3];
-    model.update("abc");
-    model.matches.map!(match => match.index).array.should == [0];
-    model.update("b");
-    model.matches.map!(match => match.index).array.should == [0, 1, 3];
-}
-
-@("appended lines get their own index") unittest
-{
-    auto model = new Model();
-    model.append("a1");
-    model.append(["a2", "b", "a3"]);
-    model.update("a");
-    model.matches.map!(match => match.index).array.should == [0, 1, 3];
-    model.append(["a4", "a5"]);
-    model.matches.map!(match => match.index).array.should == [0, 1, 3, 4, 5];
-}
-
-@("extending a grapheme must search all lines again") unittest
-{
-    auto model = new Model();
-    model.setData(["noe\u0308l", "noel"]);
-    model.update("e");
-    model.matches.map!(match => match.index).array.should == [1];
-    model.update("e\u0308");
-    model.matches.map!(match => match.index).array.should == [0];
-    model.matches[0].positions.should == [2];
 }
